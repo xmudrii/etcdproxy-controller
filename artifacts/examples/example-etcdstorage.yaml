@@ -1,0 +1,11 @@
+apiVersion: etcd.xmudrii.com/v1alpha1
+kind: EtcdStorage
+metadata:
+  name: etcd-name # this is the name of the API group and the etcd namespace. As we’re building the service’s name based of this name, we have to limit this name not to be longer than 64-5 character (because we’re using ‘etcd-’ prefix in service’s name). The name must consist only of lower-case characters, ‘-’ and ‘.’.
+spec:
+  serverCACert: # CA certificate used to verify serving certificates. Stored in ConfigMaps specified by namespace/name pairs below. ConfigMaps along with RBAC rules allowing EtcdProxyController to access specified ConfigMaps must exist prior to creating an ‘EtcdStorage’ instance.
+    - name: etcd-serving-ca
+      namespace: foo
+  clientCert: # Client certificate for accessing etcdproxy. Stored in Secrets specified by namespace/name pairs below. Secrets along with RBAC rules allowing EtcdProxyController to access specified Secrets must exist prior to creating an ‘EtcdStorage’ instance.
+    - name: etcd-client-cert
+      namespace: foo
