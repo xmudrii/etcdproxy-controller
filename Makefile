@@ -17,7 +17,7 @@ DOCKER ?= docker
 
 default: authorsfile compile ## Create etcdproxy-controller executable in the ./bin directory and the AUTHORS file.
 
-all: default install
+all: default install # Create etcdproxy-controller executable in the ./bin and $GOPATH/bin directories and the AUTHORS file.
 
 compile: ## Create the etcdproxy-controller executable in the ./bin directory.
 	${GOBUILD} main.go controller.go
@@ -53,7 +53,7 @@ build-docker: ## build docker images
 	$(DOCKER) build -t $(REGISTRY)/$(TARGET):$(GIT_REF) .
     $(DOCKER) build -t $(REGISTRY)/$(TARGET):latest .
 
-build: authors clean build-linux-amd64 build-darwin-amd64 build-freebsd-amd64 build-windows-amd64
+build: authors clean build-linux-amd64 build-darwin-amd64 build-windows-amd64 ## Build etcdproxy-controller executable for Linux, macOS and Windows.
 
 # Because of https://github.com/golang/go/issues/6376 We actually have to build this in a container
 build-linux-amd64: ## Create the etcdproxy-controller executable for Linux 64-bit OS in the ./bin directory. Requires Docker.
@@ -72,19 +72,8 @@ docker-build-linux-amd64:
 build-darwin-amd64: ## Create the etcdproxy-controller executable for Darwin (osX) 64-bit OS in the ./bin directory. Requires Docker.
 	GOOS=darwin GOARCH=amd64 ${GOBUILD} -o bin/darwin-amd64 &
 
-build-freebsd-amd64: ## Create the etcdproxy-controller executable for FreeBSD 64-bit OS in the ./bin directory. Requires Docker.
-	GOOS=freebsd GOARCH=amd64${GOBUILD} -o bin/freebsd-amd64 &
-
 build-windows-amd64: ## Create the etcdproxy-controller executable for Windows 64-bit OS in the ./bin directory. Requires Docker.
 	GOOS=windows GOARCH=amd64${GOBUILD} -o bin/windows-amd64 &
-
-linux: shell
-shell: ## Exec into a container with the etcdproxy-controller source mounted inside
-	docker run \
-	-i -t \
-	-w /go/src/github.com/xmudrii/etcdproxy-controller \
-	-v ${PWD}:/go/src/github.com/xmudrii/etcdproxy-controller \
-	--rm ${SHELL_IMAGE} /bin/bash
 
 .PHONY: test
 test: ## Run tests.
@@ -97,9 +86,6 @@ verify-ci: install-tools ## Run code checks
 verify-header: ## Check if the headers are valid. This is ran in CI.
 	./hack/verify-header-go.sh
 	./hack/verify-header-sh.sh
-
-update-headers: ## Update the headers in the repository. Required for all new files.
-	./hack/headers.sh
 
 .PHONY: install-tools
 install-tools:
