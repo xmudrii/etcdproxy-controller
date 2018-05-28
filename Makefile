@@ -3,9 +3,9 @@ ifndef VERBOSE
 endif
 
 PKGS=$(shell go list ./... | grep -v /vendor)
-FMT_PKGS=$(shell go list -f {{.Dir}} ./... | grep -v vendor | grep -v client)
 SHELL_IMAGE=golang:1.10
 PWD=$(shell pwd)
+GOFILES=$(shell find . -type f -name '*.go' -not -path "./vendor/*")
 GOBUILD=go build -o bin/etcdproxy-controller
 
 default: authorsfile compile ## Create etcdproxy-controller executable in the ./bin directory and the AUTHORS file.
@@ -13,7 +13,7 @@ default: authorsfile compile ## Create etcdproxy-controller executable in the ./
 all: default install
 
 compile: ## Create the etcdproxy-controller executable in the ./bin directory.
-	${GOBUILD} main.go
+	${GOBUILD} main.go controller.go
 
 install: ## Create the etcdproxy-controller executable in $GOPATH/bin directory.
 	install -m 0755 bin/etcdproxy-controller ${GOPATH}/bin/etcdproxy-controller
@@ -26,10 +26,10 @@ clean: ## Clean the project tree from binary files
 
 gofmt: install-tools ## Go fmt your code
 	echo "Fixing format of go files..."; \
-	for package in $(FMT_PKGS); \
+	for file in $(GOFILES); \
 	do \
-		gofmt -w $$package ; \
-		goimports -l -w $$package ; \
+		gofmt -l -w $$file ; \
+		goimports -l -w $$file ; \
 	done
 
 golint: install-tools ## check for style mistakes all Go files using golint
@@ -75,12 +75,12 @@ shell: ## Exec into a container with the etcdproxy-controller source mounted ins
 test: ## Run tests.
 	go test -timeout 20m -v $(PKGS)
 
-.PHONY: check-code
-check-code: install-tools ## Run code checks
-	PKGS="${FMT_PKGS}" GOFMT="gofmt" GOLINT="golint" ./hack/ci-checks.sh
+.PHONY: verify-ci
+verify-ci: install-tools ## Run code checks
+	PKGS="${GOFILES}" GOFMT="gofmt" ./hack/verify-ci.sh
 
-check-headers: ## Check if the headers are valid. This is ran in CI.
-	./hack/check-header.sh
+verify-header: ## Check if the headers are valid. This is ran in CI.
+	./hack/verify-header-go.sh
 
 update-headers: ## Update the headers in the repository. Required for all new files.
 	./hack/headers.sh

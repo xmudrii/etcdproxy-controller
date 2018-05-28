@@ -1,0 +1,15 @@
+language: go
+
+go:
+  - '1.10.x'
+
+jobs:
+  include:
+    - stage: Check headers
+      script: make verify-header
+    - stage: Check go files
+      script: make verify-ci
+    - stage: Compile
+      script: make compile
+    - stage: Tests
+      script: make test

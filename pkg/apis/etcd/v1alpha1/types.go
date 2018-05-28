@@ -35,12 +35,10 @@ type EtcdStorage struct {
 
 // EtdcStorageSpec is the spec for a EtcdStorage resource
 type EtdcStorageSpec struct {
-
 }
 
 // EtcdStorageStatus is the status for a EtcdStorage resource
 type EtcdStorageStatus struct {
-
 }
 
 // +genclient:nonNamespaced

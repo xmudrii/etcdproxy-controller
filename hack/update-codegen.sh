@@ -29,7 +29,7 @@ ${CODEGEN_PKG}/generate-groups.sh "deepcopy,client,informer,lister" \
   github.com/xmudrii/etcdproxy-controller/pkg/client github.com/xmudrii/etcdproxy-controller/pkg/apis \
   etcd:v1alpha1 \
   --output-base "$(dirname ${BASH_SOURCE})/../../../.." \
-  --go-header-file ${SCRIPT_ROOT}/hack/boilerplate.go.txt
+  --go-header-file ${SCRIPT_ROOT}/hack/custom-boilerplate.go.txt
 
 # To use your own boilerplate text use:
 #   --go-header-file ${SCRIPT_ROOT}/hack/custom-boilerplate.go.txt
