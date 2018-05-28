@@ -7,6 +7,13 @@ SHELL_IMAGE=golang:1.10
 PWD=$(shell pwd)
 GOFILES=$(shell find . -type f -name '*.go' -not -path "./vendor/*")
 GOBUILD=go build -o bin/etcdproxy-controller
+GIT_REF = $(shell git rev-parse --short=8 --verify HEAD)
+
+TARGET = etcdproxy-controller
+GOTARGET = github.com/xmudrii/$(TARGET)
+REGISTRY ?= xmudrii
+IMAGE = $(REGISTRY)/$(TARGET)
+DOCKER ?= docker
 
 default: authorsfile compile ## Create etcdproxy-controller executable in the ./bin directory and the AUTHORS file.
 
@@ -37,6 +44,14 @@ golint: install-tools ## check for style mistakes all Go files using golint
 
 govet: ## apply go vet to all the Go files
 	@go vet $(PKGS)
+
+push: ## push to the docker registry
+	$(DOCKER) push $(REGISTRY)/$(TARGET):$(GIT_REF)
+	$(DOCKER) push $(REGISTRY)/$(TARGET):latest
+
+build-docker: ## build docker images
+	$(DOCKER) build -t $(REGISTRY)/$(TARGET):$(GIT_REF) .
+    $(DOCKER) build -t $(REGISTRY)/$(TARGET):latest .
 
 build: authors clean build-linux-amd64 build-darwin-amd64 build-freebsd-amd64 build-windows-amd64
 

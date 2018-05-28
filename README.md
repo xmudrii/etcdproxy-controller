@@ -2,7 +2,7 @@
 
 [![Build Status](https://travis-ci.org/xmudrii/etcdproxy-controller.svg?branch=master)](https://travis-ci.org/xmudrii/etcdproxy-controller) [![GoDoc](https://godoc.org/github.com/xmudrii/etcdproxy-controller?status.svg)](https://godoc.org/github.com/xmudrii/etcdproxy-controller) [![Go Report Card](https://goreportcard.com/badge/github.com/xmudrii/etcdproxy-controller)](https://goreportcard.com/report/github.com/xmudrii/etcdproxy-controller) 
 
-Implements: https://groups.google.com/forum/#!msg/kubernetes-sig-api-machinery/rHEoQ8cgYwk/iglsNeBwCgAJ
+Implements https://groups.google.com/forum/#!msg/kubernetes-sig-api-machinery/rHEoQ8cgYwk/iglsNeBwCgAJ
 
 ## Purpose
 
