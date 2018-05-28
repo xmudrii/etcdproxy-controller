@@ -81,6 +81,7 @@ verify-ci: install-tools ## Run code checks
 
 verify-header: ## Check if the headers are valid. This is ran in CI.
 	./hack/verify-header-go.sh
+	./hack/verify-header-sh.sh
 
 update-headers: ## Update the headers in the repository. Required for all new files.
 	./hack/headers.sh
