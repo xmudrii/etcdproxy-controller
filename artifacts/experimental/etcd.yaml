@@ -10,18 +10,18 @@ spec:
     image: quay.io/coreos/etcd:v3.2.18
     env:
     - name: ETCD_CERT_FILE
-      value: "/etc/server-certs/server.pem"
+      value: "/etc/certs/server.pem"
     - name: ETCD_KEY_FILE
-      value: "/etc/server-certs/server-key.pem"
+      value: "/etc/certs/server-key.pem"
     - name: ETCD_TRUSTED_CA_FILE
-      value: "/etc/server-certs/ca.pem"
+      value: "/etc/certs/ca.pem"
     - name: ETCD_ADVERTISE_CLIENT_URLS
       value: "https://0.0.0.0:2379"
     - name: ETCD_LISTEN_CLIENT_URLS
       value: "https://0.0.0.0:2379"
     volumeMounts:
     - name: server-certs
-      mountPath: "/etc/server-certs"
+      mountPath: "/etc/certs"
       readOnly: true
   volumes:
   - name: server-certs
