@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: core-etcd
+  labels:
+    app: etcd
+spec:
+  containers:
+  - name: etcd
+    image: quay.io/coreos/etcd:v3.2.18
+    env:
+    - name: ETCD_CERT_FILE
+      value: "/etc/certs/server.pem"
+    - name: ETCD_KEY_FILE
+      value: "/etc/certs/server-key.pem"
+    - name: ETCD_TRUSTED_CA_FILE
+      value: "/etc/certs/ca.pem"
+    - name: ETCD_ADVERTISE_CLIENT_URLS
+      value: "https://0.0.0.0:2379"
+    - name: ETCD_LISTEN_CLIENT_URLS
+      value: "https://0.0.0.0:2379"
+    volumeMounts:
+    - name: server-certs
+      mountPath: "/etc/certs"
+      readOnly: true
+  volumes:
+  - name: server-certs
+    secret:
+      secretName: server-certs

@@ -1,0 +1,11 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: etcdproxy-svc-1
+spec:
+  selector:
+    controller: epc
+  ports:
+  - protocol: TCP
+    port: 2379
+    targetPort: 2379
