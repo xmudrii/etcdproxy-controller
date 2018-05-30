@@ -13,3 +13,6 @@ jobs:
       script: make compile
     - stage: Tests
       script: make test
+
+notifications:
+  email: false
