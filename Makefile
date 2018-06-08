@@ -20,7 +20,7 @@ default: authorsfile compile ## Create etcdproxy-controller executable in the ./
 all: default install # Create etcdproxy-controller executable in the ./bin and $GOPATH/bin directories and the AUTHORS file.
 
 compile: ## Create the etcdproxy-controller executable in the ./bin directory.
-	${GOBUILD} main.go controller.go
+	CGO_ENABLED=0 ${GOBUILD} .
 
 install: ## Create the etcdproxy-controller executable in $GOPATH/bin directory.
 	install -m 0755 bin/etcdproxy-controller ${GOPATH}/bin/etcdproxy-controller
