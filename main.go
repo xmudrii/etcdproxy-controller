@@ -29,12 +29,16 @@ import (
 
 	clientset "github.com/xmudrii/etcdproxy-controller/pkg/client/clientset/versioned"
 	informers "github.com/xmudrii/etcdproxy-controller/pkg/client/informers/externalversions"
+	"github.com/xmudrii/etcdproxy-controller/pkg/controller/etcdproxy"
 	"github.com/xmudrii/etcdproxy-controller/pkg/signals"
 )
 
 var (
-	masterURL  string
 	kubeconfig string
+
+	etcdURL             string
+	etcdCAConfigMapName string
+	etcdCertSecretName  string
 )
 
 func main() {
@@ -43,7 +47,7 @@ func main() {
 	// set up signals so we handle the first shutdown signal gracefully
 	stopCh := signals.SetupSignalHandler()
 
-	cfg, err := clientcmd.BuildConfigFromFlags(masterURL, kubeconfig)
+	cfg, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
 		glog.Fatalf("Error building kubeconfig: %s", err.Error())
 	}
@@ -53,20 +57,31 @@ func main() {
 		glog.Fatalf("Error building kubernetes clientset: %s", err.Error())
 	}
 
-	exampleClient, err := clientset.NewForConfig(cfg)
+	etcdproxyClient, err := clientset.NewForConfig(cfg)
 	if err != nil {
 		glog.Fatalf("Error building example clientset: %s", err.Error())
 	}
 
-	kubeInformerFactory := kubeinformers.NewSharedInformerFactory(kubeClient, time.Second*30)
-	exampleInformerFactory := informers.NewSharedInformerFactory(exampleClient, time.Second*30)
+	controllerNamespace := etcdproxy.GetControllerNamespace()
 
-	controller := NewEtcdStorageController(kubeClient, exampleClient,
-		kubeInformerFactory.Apps().V1().Deployments(),
-		exampleInformerFactory.Etcd().V1alpha1().EtcdStorages())
+	kubeInformersNamespaced := kubeinformers.NewFilteredSharedInformerFactory(kubeClient, 10*time.Minute, controllerNamespace, nil)
+	etcdproxyInformers := informers.NewSharedInformerFactory(etcdproxyClient, 10*time.Minute)
 
-	go kubeInformerFactory.Start(stopCh)
-	go exampleInformerFactory.Start(stopCh)
+	etcdConnectionInfo := &etcdproxy.EtcdConnectionInfo{
+		EtcdURL:             etcdURL,
+		EtcdCAConfigMapName: etcdCAConfigMapName,
+		EtcdCertSecretName:  etcdCertSecretName,
+	}
+
+	controller := etcdproxy.NewEtcdProxyController(kubeClient, etcdproxyClient,
+		kubeInformersNamespaced.Apps().V1().ReplicaSets(),
+		kubeInformersNamespaced.Core().V1().Services(),
+		etcdproxyInformers.Etcd().V1alpha1().EtcdStorages(),
+		etcdConnectionInfo,
+		controllerNamespace)
+
+	go kubeInformersNamespaced.Start(stopCh)
+	go etcdproxyInformers.Start(stopCh)
 
 	if err = controller.Run(2, stopCh); err != nil {
 		glog.Fatalf("Error running controller: %s", err.Error())
@@ -75,5 +90,8 @@ func main() {
 
 func init() {
 	flag.StringVar(&kubeconfig, "kubeconfig", "", "Path to a kubeconfig. Only required if out-of-cluster.")
-	flag.StringVar(&masterURL, "master", "", "The address of the Kubernetes API server. Overrides any value in kubeconfig. Only required if out-of-cluster.")
+
+	flag.StringVar(&etcdURL, "etcd-core-url", "", "The address of the core etcd server. Required.")
+	flag.StringVar(&etcdCAConfigMapName, "etcd-ca-name", "etcd-coreserving-ca", "The name of the ConfigMap where CA is stored.")
+	flag.StringVar(&etcdCertSecretName, "etcd-cert-name", "etcd-coreserving-cert", "The name of the Secret where client certificates are stored.")
 }
