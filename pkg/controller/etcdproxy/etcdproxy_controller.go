@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	appsinformers "k8s.io/client-go/informers/apps/v1"
@@ -46,10 +47,9 @@ import (
 	samplescheme "github.com/xmudrii/etcdproxy-controller/pkg/client/clientset/versioned/scheme"
 	informers "github.com/xmudrii/etcdproxy-controller/pkg/client/informers/externalversions/etcd/v1alpha1"
 	listers "github.com/xmudrii/etcdproxy-controller/pkg/client/listers/etcd/v1alpha1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-const controllerAgentName = "etcdproxy-controller"
+const httpUserAgentName = "etcdproxy-controller"
 
 const (
 	// SuccessSynced is used as part of the Event 'reason' when a EtcdStorage is synced
@@ -69,12 +69,12 @@ const (
 	MessageResourceSynced = "EtcdStorage synced successfully"
 )
 
-// EtcdConnectionInfo type is used to wire information
+// CoreEtcdOptions type is used to wire information
 // used by controller to create ReplicaSets.
-type EtcdConnectionInfo struct {
-	EtcdURL             string
-	EtcdCAConfigMapName string
-	EtcdCertSecretName  string
+type CoreEtcdOptions struct {
+	URL             string
+	CAConfigMapName string
+	CertSecretName  string
 }
 
 // EtcdProxyController is the controller implementation for EtcdStorage resources
@@ -97,8 +97,8 @@ type EtcdProxyController struct {
 	// recorder is an event recorder for recording Event resources to the Kubernetes API.
 	recorder record.EventRecorder
 
-	// etcdConnectionInfo is used to wire information used by controller to create ReplicaSets.
-	etcdConnectionInfo *EtcdConnectionInfo
+	// coreEtcdOptions is used to wire information used by controller to create ReplicaSets.
+	coreEtcdOptions *CoreEtcdOptions
 
 	// ControllerNamespace is name of namespace where controller is located.
 	controllerNamespace string
@@ -111,7 +111,7 @@ func NewEtcdProxyController(
 	replicasetsInformer appsinformers.ReplicaSetInformer,
 	servicesInformer corev1informers.ServiceInformer,
 	etcdstorageInformer informers.EtcdStorageInformer,
-	etcdConnectionInfo *EtcdConnectionInfo,
+	coreEtcdOptions *CoreEtcdOptions,
 	controllerNamespace string) *EtcdProxyController {
 
 	// Create event broadcaster
@@ -121,7 +121,7 @@ func NewEtcdProxyController(
 	eventBroadcaster := record.NewBroadcaster()
 	eventBroadcaster.StartLogging(glog.Infof)
 	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: kubeclientset.CoreV1().Events("")})
-	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: controllerAgentName})
+	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: httpUserAgentName})
 
 	controller := &EtcdProxyController{
 		kubeclientset:       kubeclientset,
@@ -134,7 +134,7 @@ func NewEtcdProxyController(
 		etcdstoragesSynced:  etcdstorageInformer.Informer().HasSynced,
 		workqueue:           workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "EtcdStorages"),
 		recorder:            recorder,
-		etcdConnectionInfo:  etcdConnectionInfo,
+		coreEtcdOptions:     coreEtcdOptions,
 		controllerNamespace: controllerNamespace,
 	}
 
@@ -345,21 +345,10 @@ func (c *EtcdProxyController) syncHandler(key string) error {
 		return fmt.Errorf(msg)
 	}
 
-	// Finally, we update the status block of the EtcdStorage resource to reflect the
-	// current state of the world
-	err = c.updateEtcdStorageStatus(etcdstorage)
-	if err != nil {
-		return err
-	}
+	// TODO(xmudrii): Add CR status updating once Status subresource is implemented.
 
 	c.recorder.Event(etcdstorage, corev1.EventTypeNormal, SuccessSynced, MessageResourceSynced)
 	return nil
-}
-
-func (c *EtcdProxyController) updateEtcdStorageStatus(etcdstorage *samplev1alpha1.EtcdStorage) error {
-	etcdstorageCopy := etcdstorage.DeepCopy()
-	_, err := c.etcdProxyClient.EtcdV1alpha1().EtcdStorages().UpdateStatus(etcdstorageCopy)
-	return err
 }
 
 // enqueueEtcdStorage takes a EtcdStorage resource and converts it into a namespace/name
@@ -423,8 +412,8 @@ func (c *EtcdProxyController) newReplicaSet(etcdstorage *samplev1alpha1.EtcdStor
 		"controller": "epc",
 	}
 	replicas := int32(1)
-	etcdaddr := fmt.Sprintf("--endpoints=%s", c.etcdConnectionInfo.EtcdURL)
-	etcdns := fmt.Sprintf("--namespace=/%s", etcdstorage.ObjectMeta.Name)
+	etcdaddr := fmt.Sprintf("--endpoints=%s", c.coreEtcdOptions.URL)
+	etcdns := fmt.Sprintf("--namespace=/%s/", etcdstorage.ObjectMeta.Name)
 
 	return &appsv1.ReplicaSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -463,12 +452,12 @@ func (c *EtcdProxyController) newReplicaSet(etcdstorage *samplev1alpha1.EtcdStor
 							},
 							VolumeMounts: []corev1.VolumeMount{
 								{
-									Name:      c.etcdConnectionInfo.EtcdCertSecretName,
+									Name:      c.coreEtcdOptions.CertSecretName,
 									MountPath: "/etc/certs/client",
 									ReadOnly:  true,
 								},
 								{
-									Name:      c.etcdConnectionInfo.EtcdCAConfigMapName,
+									Name:      c.coreEtcdOptions.CAConfigMapName,
 									MountPath: "/etc/certs/ca",
 									ReadOnly:  true,
 								},
@@ -477,19 +466,19 @@ func (c *EtcdProxyController) newReplicaSet(etcdstorage *samplev1alpha1.EtcdStor
 					},
 					Volumes: []corev1.Volume{
 						{
-							Name: c.etcdConnectionInfo.EtcdCertSecretName,
+							Name: c.coreEtcdOptions.CertSecretName,
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
-									SecretName: c.etcdConnectionInfo.EtcdCertSecretName,
+									SecretName: c.coreEtcdOptions.CertSecretName,
 								},
 							},
 						},
 						{
-							Name: c.etcdConnectionInfo.EtcdCAConfigMapName,
+							Name: c.coreEtcdOptions.CAConfigMapName,
 							VolumeSource: corev1.VolumeSource{
 								ConfigMap: &corev1.ConfigMapVolumeSource{
 									LocalObjectReference: corev1.LocalObjectReference{
-										Name: c.etcdConnectionInfo.EtcdCAConfigMapName,
+										Name: c.coreEtcdOptions.CAConfigMapName,
 									},
 								},
 							},

@@ -45,7 +45,7 @@ func TestSyncHandler(t *testing.T) {
 		name                   string
 		namespace              string
 		startingEtcdStorage    *v1alpha1.EtcdStorage
-		connectionInfo         *EtcdConnectionInfo
+		connectionInfo         *CoreEtcdOptions
 		expectedReplicaSetName string
 		expectedServiceName    string
 	}{
@@ -53,10 +53,10 @@ func TestSyncHandler(t *testing.T) {
 			name:                "test simple creation",
 			namespace:           "kube-apiserver-storage",
 			startingEtcdStorage: etcdStorage("test-1"),
-			connectionInfo: &EtcdConnectionInfo{
-				EtcdURL:             "https://test.etcd.svc:2379",
-				EtcdCAConfigMapName: "etcd-coreserving-ca",
-				EtcdCertSecretName:  "etcd-coreserving-cert",
+			connectionInfo: &CoreEtcdOptions{
+				URL:             "https://test.etcd.svc:2379",
+				CAConfigMapName: "etcd-coreserving-ca",
+				CertSecretName:  "etcd-coreserving-cert",
 			},
 			expectedReplicaSetName: "etcd-rs-test-1",
 			expectedServiceName:    "etcd-test-1",
@@ -65,10 +65,10 @@ func TestSyncHandler(t *testing.T) {
 			name:                "test simple creation with non-default namespace",
 			namespace:           "some-etcd-namespace",
 			startingEtcdStorage: etcdStorage("test-2"),
-			connectionInfo: &EtcdConnectionInfo{
-				EtcdURL:             "https://test.etcd.svc:2379",
-				EtcdCAConfigMapName: "etcd-coreserving-ca",
-				EtcdCertSecretName:  "etcd-coreserving-cert",
+			connectionInfo: &CoreEtcdOptions{
+				URL:             "https://test.etcd.svc:2379",
+				CAConfigMapName: "etcd-coreserving-ca",
+				CertSecretName:  "etcd-coreserving-cert",
 			},
 			expectedReplicaSetName: "etcd-rs-test-2",
 			expectedServiceName:    "etcd-test-2",
@@ -96,7 +96,7 @@ func TestSyncHandler(t *testing.T) {
 				servicesLister:    svclisters.NewServiceLister(indexer),
 				recorder:          &record.FakeRecorder{},
 
-				etcdConnectionInfo:  tc.connectionInfo,
+				coreEtcdOptions:     tc.connectionInfo,
 				controllerNamespace: tc.namespace,
 			}
 			err := c.syncHandler(tc.startingEtcdStorage.Name)
