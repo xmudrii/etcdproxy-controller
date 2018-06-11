@@ -69,12 +69,22 @@ const (
 	MessageResourceSynced = "EtcdStorage synced successfully"
 )
 
-// CoreEtcdOptions type is used to wire information
-// used by controller to create ReplicaSets.
+// CoreEtcdOptions type is used to wire the core etcd information used by controller to create ReplicaSets.
 type CoreEtcdOptions struct {
 	URL             string
 	CAConfigMapName string
 	CertSecretName  string
+}
+
+// EtcdProxyOptions type is used to pass information from cli to the controller.
+type EtcdProxyOptions struct {
+	CoreEtcd CoreEtcdOptions
+
+	// ControllerNamespace is name of namespace where controller is deployed.
+	ControllerNamespace string
+
+	// ProxyImage is name of the etcd image to be used for etcd-proxy ReplicaSet creation.
+	ProxyImage string
 }
 
 // EtcdProxyController is the controller implementation for EtcdStorage resources
@@ -97,11 +107,8 @@ type EtcdProxyController struct {
 	// recorder is an event recorder for recording Event resources to the Kubernetes API.
 	recorder record.EventRecorder
 
-	// coreEtcdOptions is used to wire information used by controller to create ReplicaSets.
-	coreEtcdOptions *CoreEtcdOptions
-
-	// ControllerNamespace is name of namespace where controller is located.
-	controllerNamespace string
+	// etcdProxyOptions is used to wire information used by controller to create ReplicaSets.
+	etcdProxyOptions *EtcdProxyOptions
 }
 
 // NewEtcdProxyController returns a new sample controller
@@ -111,8 +118,7 @@ func NewEtcdProxyController(
 	replicasetsInformer appsinformers.ReplicaSetInformer,
 	servicesInformer corev1informers.ServiceInformer,
 	etcdstorageInformer informers.EtcdStorageInformer,
-	coreEtcdOptions *CoreEtcdOptions,
-	controllerNamespace string) *EtcdProxyController {
+	etcdProxyOptions *EtcdProxyOptions) *EtcdProxyController {
 
 	// Create event broadcaster
 	// Add the controller types to the default Kubernetes Scheme so Events can be logged for the controller types.
@@ -124,18 +130,17 @@ func NewEtcdProxyController(
 	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: httpUserAgentName})
 
 	controller := &EtcdProxyController{
-		kubeclientset:       kubeclientset,
-		etcdProxyClient:     etcdProxyClient,
-		replicasetsLister:   replicasetsInformer.Lister(),
-		replicasetsSynced:   replicasetsInformer.Informer().HasSynced,
-		servicesLister:      servicesInformer.Lister(),
-		servicesSynced:      servicesInformer.Informer().HasSynced,
-		etcdstoragesLister:  etcdstorageInformer.Lister(),
-		etcdstoragesSynced:  etcdstorageInformer.Informer().HasSynced,
-		workqueue:           workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "EtcdStorages"),
-		recorder:            recorder,
-		coreEtcdOptions:     coreEtcdOptions,
-		controllerNamespace: controllerNamespace,
+		kubeclientset:      kubeclientset,
+		etcdProxyClient:    etcdProxyClient,
+		replicasetsLister:  replicasetsInformer.Lister(),
+		replicasetsSynced:  replicasetsInformer.Informer().HasSynced,
+		servicesLister:     servicesInformer.Lister(),
+		servicesSynced:     servicesInformer.Informer().HasSynced,
+		etcdstoragesLister: etcdstorageInformer.Lister(),
+		etcdstoragesSynced: etcdstorageInformer.Informer().HasSynced,
+		workqueue:          workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "EtcdStorages"),
+		recorder:           recorder,
+		etcdProxyOptions:   etcdProxyOptions,
 	}
 
 	glog.Info("Setting up event handlers")
@@ -303,7 +308,10 @@ func (c *EtcdProxyController) syncHandler(key string) error {
 
 	replicaset, err := c.replicasetsLister.ReplicaSets(c.controllerNamespace).Get(getReplicaSetName(etcdstorage))
 	if errors.IsNotFound(err) {
-		replicaset, err = c.kubeclientset.AppsV1().ReplicaSets(c.controllerNamespace).Create(c.newReplicaSet(etcdstorage))
+		replicaset, err = c.kubeclientset.AppsV1().ReplicaSets(c.etcdProxyOptions.ControllerNamespace).Create(newReplicaSet(
+			etcdstorage, c.etcdProxyOptions.ControllerNamespace, etcdstorage.Name,
+			c.etcdProxyOptions.ProxyImage, c.etcdProxyOptions.CoreEtcd.URL,
+			c.etcdProxyOptions.CoreEtcd.CAConfigMapName, c.etcdProxyOptions.CoreEtcd.CertSecretName))
 	}
 
 	// If an error occurs during Get/Create, we'll requeue the item so we can
