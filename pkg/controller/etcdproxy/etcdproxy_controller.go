@@ -18,8 +18,6 @@ package etcdproxy
 
 import (
 	"fmt"
-	"io/ioutil"
-	"strings"
 	"time"
 
 	"github.com/golang/glog"
@@ -27,8 +25,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	appsinformers "k8s.io/client-go/informers/apps/v1"
@@ -42,7 +38,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 
-	samplev1alpha1 "github.com/xmudrii/etcdproxy-controller/pkg/apis/etcd/v1alpha1"
+	etcdstoragev1alpha1 "github.com/xmudrii/etcdproxy-controller/pkg/apis/etcd/v1alpha1"
 	clientset "github.com/xmudrii/etcdproxy-controller/pkg/client/clientset/versioned"
 	samplescheme "github.com/xmudrii/etcdproxy-controller/pkg/client/clientset/versioned/scheme"
 	informers "github.com/xmudrii/etcdproxy-controller/pkg/client/informers/externalversions/etcd/v1alpha1"
@@ -54,19 +50,24 @@ const httpUserAgentName = "etcdproxy-controller"
 const (
 	// SuccessSynced is used as part of the Event 'reason' when a EtcdStorage is synced
 	SuccessSynced = "Synced"
-	// ErrResourceExists is used as part of the Event 'reason' when a EtcdStorage fails
-	// to sync due to a ReplicaSet of the same name already existing.
-	ErrResourceExists = "ErrResourceExists"
+	// ResourceReclaimed is used as part of the Event 'reason' when a replicaset or service already exists
+	// and EtcdStorage reclaims it.
+	ResourceReclaimed = "ResourceReclaimed"
+
+	// ErrResourceReclaimed is used as port of the Event 'reason' when reclaiming a resource fails.
+	ErrResourceReclaimed = "ErrResourceReclaimed"
 	// ErrUnknown is used as part of the Event 'reason' when a EtcdStorage fails
 	// to get, create, or update resource.
 	ErrUnknown = "ErrUnknown"
 
-	// MessageResourceExists is the message used for Events when a resource
+	// ResourceReclaimedReason is the message used for Events when a resource
 	// fails to sync due to a ReplicaSet already existing
-	MessageResourceExists = "Resource %q already exists and is not managed by EtcdStorage"
+	ResourceReclaimedReason = "Resource %q already exists and is set to be managed by EtcdStorage"
 	// MessageResourceSynced is the message used for an Event fired when a EtcdStorage
 	// is synced successfully
 	MessageResourceSynced = "EtcdStorage synced successfully"
+	// MessageErrResourceReclaimed is the message used for an Event fired when a ErrResourceReclaimed occurs.
+	MessageErrResourceReclaimed = "Unable to put EtcdStorage OwnerReference to resource %q"
 )
 
 // CoreEtcdOptions type is used to wire the core etcd information used by controller to create ReplicaSets.
@@ -306,7 +307,7 @@ func (c *EtcdProxyController) syncHandler(key string) error {
 		return err
 	}
 
-	replicaset, err := c.replicasetsLister.ReplicaSets(c.controllerNamespace).Get(getReplicaSetName(etcdstorage))
+	replicaset, err := c.replicasetsLister.ReplicaSets(c.etcdProxyOptions.ControllerNamespace).Get(replicaSetName(etcdstorage))
 	if errors.IsNotFound(err) {
 		replicaset, err = c.kubeclientset.AppsV1().ReplicaSets(c.etcdProxyOptions.ControllerNamespace).Create(newReplicaSet(
 			etcdstorage, c.etcdProxyOptions.ControllerNamespace, etcdstorage.Name,
@@ -325,16 +326,25 @@ func (c *EtcdProxyController) syncHandler(key string) error {
 	// If the ReplicaSet is not controlled by this EtcdStorage resource, we should log
 	// a warning to the event recorder and ret
 	if !metav1.IsControlledBy(replicaset, etcdstorage) {
-		msg := fmt.Sprintf(MessageResourceExists, replicaset.Name)
-		c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrResourceExists, msg)
-		return fmt.Errorf(msg)
+		replicaset.SetOwnerReferences([]metav1.OwnerReference{
+			*metav1.NewControllerRef(etcdstorage, etcdstoragev1alpha1.SchemeGroupVersion.WithKind("EtcdStorage")),
+		})
+		replicaset, err = c.kubeclientset.AppsV1().ReplicaSets(c.etcdProxyOptions.ControllerNamespace).Update(replicaset)
+		if err != nil {
+			msg := fmt.Sprintf(MessageErrResourceReclaimed, replicaset.Name)
+			c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrResourceReclaimed, msg)
+			return err
+		}
+		msg := fmt.Sprintf(ResourceReclaimedReason, replicaset.Name)
+		c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ResourceReclaimed, msg)
 	}
 
 	// Create Service to expose the etcdproxy pod.
 	serviceName := fmt.Sprintf("etcd-%s", etcdstorage.ObjectMeta.Name)
-	service, err := c.servicesLister.Services(c.controllerNamespace).Get(serviceName)
+	service, err := c.servicesLister.Services(c.etcdProxyOptions.ControllerNamespace).Get(serviceName)
 	if errors.IsNotFound(err) {
-		service, err = c.kubeclientset.CoreV1().Services(c.controllerNamespace).Create(c.newService(etcdstorage))
+		service, err = c.kubeclientset.CoreV1().Services(c.etcdProxyOptions.ControllerNamespace).Create(newService(
+			etcdstorage, c.etcdProxyOptions.ControllerNamespace))
 	}
 
 	// If an error occurs during Get/Create, we'll requeue the item so we can
@@ -348,9 +358,17 @@ func (c *EtcdProxyController) syncHandler(key string) error {
 	// If the Service is not controlled by this EtcdStorage resource, we should log
 	// a warning to the event recorder and ret
 	if !metav1.IsControlledBy(service, etcdstorage) {
-		msg := fmt.Sprintf(MessageResourceExists, service.Name)
-		c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrResourceExists, msg)
-		return fmt.Errorf(msg)
+		service.SetOwnerReferences([]metav1.OwnerReference{
+			*metav1.NewControllerRef(etcdstorage, etcdstoragev1alpha1.SchemeGroupVersion.WithKind("EtcdStorage")),
+		})
+		service, err = c.kubeclientset.CoreV1().Services(c.etcdProxyOptions.ControllerNamespace).Update(service)
+		if err != nil {
+			msg := fmt.Sprintf(MessageErrResourceReclaimed, service.Name)
+			c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrResourceReclaimed, msg)
+			return err
+		}
+		msg := fmt.Sprintf(ResourceReclaimedReason, service.Name)
+		c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ResourceReclaimed, msg)
 	}
 
 	// TODO(xmudrii): Add CR status updating once Status subresource is implemented.

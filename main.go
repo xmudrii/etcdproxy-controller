@@ -65,7 +65,10 @@ func main() {
 		glog.Fatalf("Error building example clientset: %s", err.Error())
 	}
 
-	controllerNamespace := etcdproxy.GetControllerNamespace()
+	controllerNamespace, err := etcdproxy.ControllerNamespace(namespace)
+	if err != nil {
+		glog.Fatalf("Error detecting controller namespace: %s", err.Error())
+	}
 
 	kubeInformersNamespaced := kubeinformers.NewFilteredSharedInformerFactory(kubeClient, 10*time.Minute, controllerNamespace, nil)
 	etcdproxyInformers := informers.NewSharedInformerFactory(etcdproxyClient, 10*time.Minute)
