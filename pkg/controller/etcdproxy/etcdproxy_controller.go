@@ -18,8 +18,6 @@ package etcdproxy
 
 import (
 	"fmt"
-	"io/ioutil"
-	"strings"
 	"time"
 
 	"github.com/golang/glog"
@@ -27,8 +25,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	appsinformers "k8s.io/client-go/informers/apps/v1"
@@ -42,7 +38,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 
-	samplev1alpha1 "github.com/xmudrii/etcdproxy-controller/pkg/apis/etcd/v1alpha1"
+	etcdstoragev1alpha1 "github.com/xmudrii/etcdproxy-controller/pkg/apis/etcd/v1alpha1"
 	clientset "github.com/xmudrii/etcdproxy-controller/pkg/client/clientset/versioned"
 	samplescheme "github.com/xmudrii/etcdproxy-controller/pkg/client/clientset/versioned/scheme"
 	informers "github.com/xmudrii/etcdproxy-controller/pkg/client/informers/externalversions/etcd/v1alpha1"
@@ -54,27 +50,42 @@ const httpUserAgentName = "etcdproxy-controller"
 const (
 	// SuccessSynced is used as part of the Event 'reason' when a EtcdStorage is synced
 	SuccessSynced = "Synced"
-	// ErrResourceExists is used as part of the Event 'reason' when a EtcdStorage fails
-	// to sync due to a ReplicaSet of the same name already existing.
-	ErrResourceExists = "ErrResourceExists"
+	// ResourceReclaimed is used as part of the Event 'reason' when a replicaset or service already exists
+	// and EtcdStorage reclaims it.
+	ResourceReclaimed = "ResourceReclaimed"
+
+	// ErrResourceReclaimed is used as port of the Event 'reason' when reclaiming a resource fails.
+	ErrResourceReclaimed = "ErrResourceReclaimed"
 	// ErrUnknown is used as part of the Event 'reason' when a EtcdStorage fails
 	// to get, create, or update resource.
 	ErrUnknown = "ErrUnknown"
 
-	// MessageResourceExists is the message used for Events when a resource
+	// ResourceReclaimedReason is the message used for Events when a resource
 	// fails to sync due to a ReplicaSet already existing
-	MessageResourceExists = "Resource %q already exists and is not managed by EtcdStorage"
+	ResourceReclaimedReason = "Resource %q already exists and is set to be managed by EtcdStorage"
 	// MessageResourceSynced is the message used for an Event fired when a EtcdStorage
 	// is synced successfully
 	MessageResourceSynced = "EtcdStorage synced successfully"
+	// MessageErrResourceReclaimed is the message used for an Event fired when a ErrResourceReclaimed occurs.
+	MessageErrResourceReclaimed = "Unable to put EtcdStorage OwnerReference to resource %q"
 )
 
-// CoreEtcdOptions type is used to wire information
-// used by controller to create ReplicaSets.
+// CoreEtcdOptions type is used to wire the core etcd information used by controller to create ReplicaSets.
 type CoreEtcdOptions struct {
 	URL             string
 	CAConfigMapName string
 	CertSecretName  string
+}
+
+// EtcdProxyOptions type is used to pass information from cli to the controller.
+type EtcdProxyOptions struct {
+	CoreEtcd CoreEtcdOptions
+
+	// ControllerNamespace is name of namespace where controller is deployed.
+	ControllerNamespace string
+
+	// ProxyImage is name of the etcd image to be used for etcd-proxy ReplicaSet creation.
+	ProxyImage string
 }
 
 // EtcdProxyController is the controller implementation for EtcdStorage resources
@@ -97,11 +108,8 @@ type EtcdProxyController struct {
 	// recorder is an event recorder for recording Event resources to the Kubernetes API.
 	recorder record.EventRecorder
 
-	// coreEtcdOptions is used to wire information used by controller to create ReplicaSets.
-	coreEtcdOptions *CoreEtcdOptions
-
-	// ControllerNamespace is name of namespace where controller is located.
-	controllerNamespace string
+	// etcdProxyOptions is used to wire information used by controller to create ReplicaSets.
+	etcdProxyOptions *EtcdProxyOptions
 }
 
 // NewEtcdProxyController returns a new sample controller
@@ -111,8 +119,7 @@ func NewEtcdProxyController(
 	replicasetsInformer appsinformers.ReplicaSetInformer,
 	servicesInformer corev1informers.ServiceInformer,
 	etcdstorageInformer informers.EtcdStorageInformer,
-	coreEtcdOptions *CoreEtcdOptions,
-	controllerNamespace string) *EtcdProxyController {
+	etcdProxyOptions *EtcdProxyOptions) *EtcdProxyController {
 
 	// Create event broadcaster
 	// Add the controller types to the default Kubernetes Scheme so Events can be logged for the controller types.
@@ -124,18 +131,17 @@ func NewEtcdProxyController(
 	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: httpUserAgentName})
 
 	controller := &EtcdProxyController{
-		kubeclientset:       kubeclientset,
-		etcdProxyClient:     etcdProxyClient,
-		replicasetsLister:   replicasetsInformer.Lister(),
-		replicasetsSynced:   replicasetsInformer.Informer().HasSynced,
-		servicesLister:      servicesInformer.Lister(),
-		servicesSynced:      servicesInformer.Informer().HasSynced,
-		etcdstoragesLister:  etcdstorageInformer.Lister(),
-		etcdstoragesSynced:  etcdstorageInformer.Informer().HasSynced,
-		workqueue:           workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "EtcdStorages"),
-		recorder:            recorder,
-		coreEtcdOptions:     coreEtcdOptions,
-		controllerNamespace: controllerNamespace,
+		kubeclientset:      kubeclientset,
+		etcdProxyClient:    etcdProxyClient,
+		replicasetsLister:  replicasetsInformer.Lister(),
+		replicasetsSynced:  replicasetsInformer.Informer().HasSynced,
+		servicesLister:     servicesInformer.Lister(),
+		servicesSynced:     servicesInformer.Informer().HasSynced,
+		etcdstoragesLister: etcdstorageInformer.Lister(),
+		etcdstoragesSynced: etcdstorageInformer.Informer().HasSynced,
+		workqueue:          workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "EtcdStorages"),
+		recorder:           recorder,
+		etcdProxyOptions:   etcdProxyOptions,
 	}
 
 	glog.Info("Setting up event handlers")
@@ -301,9 +307,12 @@ func (c *EtcdProxyController) syncHandler(key string) error {
 		return err
 	}
 
-	replicaset, err := c.replicasetsLister.ReplicaSets(c.controllerNamespace).Get(getReplicaSetName(etcdstorage))
+	replicaset, err := c.replicasetsLister.ReplicaSets(c.etcdProxyOptions.ControllerNamespace).Get(replicaSetName(etcdstorage))
 	if errors.IsNotFound(err) {
-		replicaset, err = c.kubeclientset.AppsV1().ReplicaSets(c.controllerNamespace).Create(c.newReplicaSet(etcdstorage))
+		replicaset, err = c.kubeclientset.AppsV1().ReplicaSets(c.etcdProxyOptions.ControllerNamespace).Create(newReplicaSet(
+			etcdstorage, c.etcdProxyOptions.ControllerNamespace, etcdstorage.Name,
+			c.etcdProxyOptions.ProxyImage, c.etcdProxyOptions.CoreEtcd.URL,
+			c.etcdProxyOptions.CoreEtcd.CAConfigMapName, c.etcdProxyOptions.CoreEtcd.CertSecretName))
 	}
 
 	// If an error occurs during Get/Create, we'll requeue the item so we can
@@ -317,16 +326,25 @@ func (c *EtcdProxyController) syncHandler(key string) error {
 	// If the ReplicaSet is not controlled by this EtcdStorage resource, we should log
 	// a warning to the event recorder and ret
 	if !metav1.IsControlledBy(replicaset, etcdstorage) {
-		msg := fmt.Sprintf(MessageResourceExists, replicaset.Name)
-		c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrResourceExists, msg)
-		return fmt.Errorf(msg)
+		replicaset.SetOwnerReferences([]metav1.OwnerReference{
+			*metav1.NewControllerRef(etcdstorage, etcdstoragev1alpha1.SchemeGroupVersion.WithKind("EtcdStorage")),
+		})
+		replicaset, err = c.kubeclientset.AppsV1().ReplicaSets(c.etcdProxyOptions.ControllerNamespace).Update(replicaset)
+		if err != nil {
+			msg := fmt.Sprintf(MessageErrResourceReclaimed, replicaset.Name)
+			c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrResourceReclaimed, msg)
+			return err
+		}
+		msg := fmt.Sprintf(ResourceReclaimedReason, replicaset.Name)
+		c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ResourceReclaimed, msg)
 	}
 
 	// Create Service to expose the etcdproxy pod.
 	serviceName := fmt.Sprintf("etcd-%s", etcdstorage.ObjectMeta.Name)
-	service, err := c.servicesLister.Services(c.controllerNamespace).Get(serviceName)
+	service, err := c.servicesLister.Services(c.etcdProxyOptions.ControllerNamespace).Get(serviceName)
 	if errors.IsNotFound(err) {
-		service, err = c.kubeclientset.CoreV1().Services(c.controllerNamespace).Create(c.newService(etcdstorage))
+		service, err = c.kubeclientset.CoreV1().Services(c.etcdProxyOptions.ControllerNamespace).Create(newService(
+			etcdstorage, c.etcdProxyOptions.ControllerNamespace))
 	}
 
 	// If an error occurs during Get/Create, we'll requeue the item so we can
@@ -340,9 +358,17 @@ func (c *EtcdProxyController) syncHandler(key string) error {
 	// If the Service is not controlled by this EtcdStorage resource, we should log
 	// a warning to the event recorder and ret
 	if !metav1.IsControlledBy(service, etcdstorage) {
-		msg := fmt.Sprintf(MessageResourceExists, service.Name)
-		c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrResourceExists, msg)
-		return fmt.Errorf(msg)
+		service.SetOwnerReferences([]metav1.OwnerReference{
+			*metav1.NewControllerRef(etcdstorage, etcdstoragev1alpha1.SchemeGroupVersion.WithKind("EtcdStorage")),
+		})
+		service, err = c.kubeclientset.CoreV1().Services(c.etcdProxyOptions.ControllerNamespace).Update(service)
+		if err != nil {
+			msg := fmt.Sprintf(MessageErrResourceReclaimed, service.Name)
+			c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrResourceReclaimed, msg)
+			return err
+		}
+		msg := fmt.Sprintf(ResourceReclaimedReason, service.Name)
+		c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ResourceReclaimed, msg)
 	}
 
 	// TODO(xmudrii): Add CR status updating once Status subresource is implemented.
@@ -402,139 +428,4 @@ func (c *EtcdProxyController) handleObject(obj interface{}) {
 		c.enqueueEtcdStorage(etcdstorage)
 		return
 	}
-}
-
-// newReplicaSet creates a new Deployment for a EtcdStorage resource. It also sets
-// the appropriate OwnerReferences on the resource so handleObject can discover
-// the EtcdStorage resource that 'owns' it.
-func (c *EtcdProxyController) newReplicaSet(etcdstorage *samplev1alpha1.EtcdStorage) *appsv1.ReplicaSet {
-	labels := map[string]string{
-		"controller": "epc",
-	}
-	replicas := int32(1)
-	etcdaddr := fmt.Sprintf("--endpoints=%s", c.coreEtcdOptions.URL)
-	etcdns := fmt.Sprintf("--namespace=/%s/", etcdstorage.ObjectMeta.Name)
-
-	return &appsv1.ReplicaSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      getReplicaSetName(etcdstorage),
-			Namespace: c.controllerNamespace,
-			OwnerReferences: []metav1.OwnerReference{
-				*metav1.NewControllerRef(etcdstorage, schema.GroupVersionKind{
-					Group:   samplev1alpha1.SchemeGroupVersion.Group,
-					Version: samplev1alpha1.SchemeGroupVersion.Version,
-					Kind:    "EtcdStorage",
-				}),
-			},
-		},
-		Spec: appsv1.ReplicaSetSpec{
-			Replicas: &replicas,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
-			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
-				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Name:    "etcdproxy",
-							Image:   "quay.io/coreos/etcd:v3.2.18",
-							Command: []string{"/usr/local/bin/etcd", "grpc-proxy", "start"},
-							Args:    []string{etcdaddr, etcdns, "--listen-addr=0.0.0.0:2379", "--cacert=/etc/certs/ca/ca.pem", "--cert=/etc/certs/client/client.pem", "--key=/etc/certs/client/client-key.pem"},
-							Ports: []corev1.ContainerPort{
-								{
-									Name:          "etcd",
-									Protocol:      corev1.ProtocolTCP,
-									ContainerPort: 2379,
-								},
-							},
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      c.coreEtcdOptions.CertSecretName,
-									MountPath: "/etc/certs/client",
-									ReadOnly:  true,
-								},
-								{
-									Name:      c.coreEtcdOptions.CAConfigMapName,
-									MountPath: "/etc/certs/ca",
-									ReadOnly:  true,
-								},
-							},
-						},
-					},
-					Volumes: []corev1.Volume{
-						{
-							Name: c.coreEtcdOptions.CertSecretName,
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: c.coreEtcdOptions.CertSecretName,
-								},
-							},
-						},
-						{
-							Name: c.coreEtcdOptions.CAConfigMapName,
-							VolumeSource: corev1.VolumeSource{
-								ConfigMap: &corev1.ConfigMapVolumeSource{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: c.coreEtcdOptions.CAConfigMapName,
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-}
-
-func (c *EtcdProxyController) newService(etcdstorage *samplev1alpha1.EtcdStorage) *corev1.Service {
-	labels := map[string]string{
-		"controller": "epc",
-	}
-
-	return &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("etcd-%s", etcdstorage.Name),
-			Namespace: c.controllerNamespace,
-			OwnerReferences: []metav1.OwnerReference{
-				*metav1.NewControllerRef(etcdstorage, schema.GroupVersionKind{
-					Group:   samplev1alpha1.SchemeGroupVersion.Group,
-					Version: samplev1alpha1.SchemeGroupVersion.Version,
-					Kind:    "EtcdStorage",
-				}),
-			},
-		},
-		Spec: corev1.ServiceSpec{
-			Selector: labels,
-			Ports: []corev1.ServicePort{
-				{
-					Protocol:   corev1.ProtocolTCP,
-					Port:       2379,
-					TargetPort: intstr.FromInt(2379),
-				},
-			},
-		},
-	}
-}
-
-// GetControllerNamespace returns name of the namespace where controller is located. The namespace name is obtained
-// from the "/var/run/secrets/kubernetes.io/serviceaccount/namespace" file. In case it's not possible to obtain it
-// from that file, the function resorts to the default name, `kube-apiserver-storage`.
-func GetControllerNamespace() string {
-	if data, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace"); err == nil {
-		if ns := strings.TrimSpace(string(data)); len(ns) > 0 {
-			return ns
-		}
-	}
-
-	runtime.HandleError(fmt.Errorf("unable to detect controller namespace"))
-	return "kube-apiserver-storage"
-}
-
-// getReplicaSetName calculates name to be used to create a ReplicaSet.
-func getReplicaSetName(etcdstorage *samplev1alpha1.EtcdStorage) string {
-	return fmt.Sprintf("etcd-rs-%s", etcdstorage.ObjectMeta.Name)
 }

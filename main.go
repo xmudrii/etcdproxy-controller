@@ -35,10 +35,13 @@ import (
 
 var (
 	kubeconfig string
+	namespace  string
 
 	coreEtcdURL             string
 	coreEtcdCAConfigMapName string
 	coreEtcdCertSecretName  string
+
+	proxyEtcdImage string
 )
 
 func main() {
@@ -62,23 +65,29 @@ func main() {
 		glog.Fatalf("Error building example clientset: %s", err.Error())
 	}
 
-	controllerNamespace := etcdproxy.GetControllerNamespace()
+	controllerNamespace, err := etcdproxy.ControllerNamespace(namespace)
+	if err != nil {
+		glog.Fatalf("Error detecting controller namespace: %s", err.Error())
+	}
 
 	kubeInformersNamespaced := kubeinformers.NewFilteredSharedInformerFactory(kubeClient, 10*time.Minute, controllerNamespace, nil)
 	etcdproxyInformers := informers.NewSharedInformerFactory(etcdproxyClient, 10*time.Minute)
 
-	coreEtcdOptions := &etcdproxy.CoreEtcdOptions{
-		URL:             coreEtcdURL,
-		CAConfigMapName: coreEtcdCAConfigMapName,
-		CertSecretName:  coreEtcdCertSecretName,
+	etcdProxyOptions := &etcdproxy.EtcdProxyOptions{
+		CoreEtcd: etcdproxy.CoreEtcdOptions{
+			URL:             coreEtcdURL,
+			CAConfigMapName: coreEtcdCAConfigMapName,
+			CertSecretName:  coreEtcdCertSecretName,
+		},
+		ControllerNamespace: controllerNamespace,
+		ProxyImage:          proxyEtcdImage,
 	}
 
 	controller := etcdproxy.NewEtcdProxyController(kubeClient, etcdproxyClient,
 		kubeInformersNamespaced.Apps().V1().ReplicaSets(),
 		kubeInformersNamespaced.Core().V1().Services(),
 		etcdproxyInformers.Etcd().V1alpha1().EtcdStorages(),
-		coreEtcdOptions,
-		controllerNamespace)
+		etcdProxyOptions)
 
 	go kubeInformersNamespaced.Start(stopCh)
 	go etcdproxyInformers.Start(stopCh)
@@ -90,8 +99,11 @@ func main() {
 
 func init() {
 	flag.StringVar(&kubeconfig, "kubeconfig", "", "Path to a kubeconfig. Only required if out-of-cluster.")
+	flag.StringVar(&namespace, "namespace", "", "Name of the namespace where controller is deployed. Only required if out-of-cluster.")
 
 	flag.StringVar(&coreEtcdURL, "etcd-core-url", "", "The address of the core etcd server. Required.")
 	flag.StringVar(&coreEtcdCAConfigMapName, "etcd-core-ca-configmap", "etcd-coreserving-ca", "The name of the ConfigMap where CA is stored.")
 	flag.StringVar(&coreEtcdCertSecretName, "etcd-core-certs-secret", "etcd-coreserving-cert", "The name of the Secret where client certificates are stored.")
+
+	flag.StringVar(&proxyEtcdImage, "etcd-proxy-image", "quay.io/coreos/etcd:v3.2.18", "The image to be used for creating etcd proxy pods.")
 }

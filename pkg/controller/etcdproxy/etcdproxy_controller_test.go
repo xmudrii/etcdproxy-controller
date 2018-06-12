@@ -43,32 +43,37 @@ func TestSyncHandler(t *testing.T) {
 
 	tests := []struct {
 		name                   string
-		namespace              string
 		startingEtcdStorage    *v1alpha1.EtcdStorage
-		connectionInfo         *CoreEtcdOptions
+		etcdProxyOptions       *EtcdProxyOptions
 		expectedReplicaSetName string
 		expectedServiceName    string
 	}{
 		{
 			name:                "test simple creation",
-			namespace:           "kube-apiserver-storage",
 			startingEtcdStorage: etcdStorage("test-1"),
-			connectionInfo: &CoreEtcdOptions{
-				URL:             "https://test.etcd.svc:2379",
-				CAConfigMapName: "etcd-coreserving-ca",
-				CertSecretName:  "etcd-coreserving-cert",
+			etcdProxyOptions: &EtcdProxyOptions{
+				CoreEtcd: CoreEtcdOptions{
+					URL:             "https://test.etcd.svc:2379",
+					CAConfigMapName: "etcd-coreserving-ca",
+					CertSecretName:  "etcd-coreserving-cert",
+				},
+				ControllerNamespace: "kube-apiserver-storage",
+				ProxyImage:          "quay.io/coreos/etcd:v3.2.18",
 			},
 			expectedReplicaSetName: "etcd-rs-test-1",
 			expectedServiceName:    "etcd-test-1",
 		},
 		{
 			name:                "test simple creation with non-default namespace",
-			namespace:           "some-etcd-namespace",
 			startingEtcdStorage: etcdStorage("test-2"),
-			connectionInfo: &CoreEtcdOptions{
-				URL:             "https://test.etcd.svc:2379",
-				CAConfigMapName: "etcd-coreserving-ca",
-				CertSecretName:  "etcd-coreserving-cert",
+			etcdProxyOptions: &EtcdProxyOptions{
+				CoreEtcd: CoreEtcdOptions{
+					URL:             "https://test.etcd.svc:2379",
+					CAConfigMapName: "etcd-coreserving-ca",
+					CertSecretName:  "etcd-coreserving-cert",
+				},
+				ControllerNamespace: "test-storage",
+				ProxyImage:          "quay.io/coreos/etcd:v3.2.18",
 			},
 			expectedReplicaSetName: "etcd-rs-test-2",
 			expectedServiceName:    "etcd-test-2",
@@ -96,8 +101,7 @@ func TestSyncHandler(t *testing.T) {
 				servicesLister:    svclisters.NewServiceLister(indexer),
 				recorder:          &record.FakeRecorder{},
 
-				coreEtcdOptions:     tc.connectionInfo,
-				controllerNamespace: tc.namespace,
+				etcdProxyOptions: tc.etcdProxyOptions,
 			}
 			err := c.syncHandler(tc.startingEtcdStorage.Name)
 			if err != nil {
@@ -105,7 +109,7 @@ func TestSyncHandler(t *testing.T) {
 			}
 
 			// Check is ReplicaSet created.
-			_, err = kubeClient.Apps().ReplicaSets(tc.namespace).Get(tc.expectedReplicaSetName, metav1.GetOptions{})
+			_, err = kubeClient.Apps().ReplicaSets(tc.etcdProxyOptions.ControllerNamespace).Get(tc.expectedReplicaSetName, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
 				t.Fatalf("replicaset not found: %v", err)
 			}
@@ -114,7 +118,7 @@ func TestSyncHandler(t *testing.T) {
 			}
 
 			// Check is Service created.
-			_, err = kubeClient.Core().Services(tc.namespace).Get(tc.expectedServiceName, metav1.GetOptions{})
+			_, err = kubeClient.Core().Services(tc.etcdProxyOptions.ControllerNamespace).Get(tc.expectedServiceName, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
 				t.Fatalf("service not found: %v", err)
 			}
