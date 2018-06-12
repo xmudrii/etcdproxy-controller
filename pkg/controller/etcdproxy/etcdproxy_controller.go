@@ -54,24 +54,6 @@ const (
 	MessageErrResourceReclaimed = "Unable to put EtcdStorage OwnerReference to resource %q"
 )
 
-// CoreEtcdOptions type is used to wire the core etcd information used by controller to create ReplicaSets.
-type CoreEtcdOptions struct {
-	URL             string
-	CAConfigMapName string
-	CertSecretName  string
-}
-
-// EtcdProxyOptions type is used to pass information from cli to the controller.
-type EtcdProxyOptions struct {
-	CoreEtcd CoreEtcdOptions
-
-	// ControllerNamespace is name of namespace where controller is deployed.
-	ControllerNamespace string
-
-	// ProxyImage is name of the etcd image to be used for etcd-proxy ReplicaSet creation.
-	ProxyImage string
-}
-
 // EtcdProxyController is the controller implementation for EtcdStorage resources
 type EtcdProxyController struct {
 	// kubeclientset is a standard kubernetes clientset
@@ -92,8 +74,8 @@ type EtcdProxyController struct {
 	// recorder is an event recorder for recording Event resources to the Kubernetes API.
 	recorder record.EventRecorder
 
-	// etcdProxyOptions is used to wire information used by controller to create ReplicaSets.
-	etcdProxyOptions *EtcdProxyOptions
+	// config is used to wire information used by controller to create ReplicaSets.
+	config *EtcdProxyControllerConfig
 }
 
 // NewEtcdProxyController returns a new sample controller
@@ -103,7 +85,7 @@ func NewEtcdProxyController(
 	replicasetsInformer appsinformers.ReplicaSetInformer,
 	servicesInformer corev1informers.ServiceInformer,
 	etcdstorageInformer informers.EtcdStorageInformer,
-	etcdProxyOptions *EtcdProxyOptions) *EtcdProxyController {
+	config *EtcdProxyControllerConfig) *EtcdProxyController {
 
 	// Create event broadcaster
 	// Add the controller types to the default Kubernetes Scheme so Events can be logged for the controller types.
@@ -125,7 +107,7 @@ func NewEtcdProxyController(
 		etcdstoragesSynced: etcdstorageInformer.Informer().HasSynced,
 		workqueue:          workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "EtcdStorages"),
 		recorder:           recorder,
-		etcdProxyOptions:   etcdProxyOptions,
+		config:             config,
 	}
 
 	glog.Info("Setting up event handlers")
@@ -291,12 +273,12 @@ func (c *EtcdProxyController) syncHandler(key string) error {
 		return err
 	}
 
-	replicaset, err := c.replicasetsLister.ReplicaSets(c.etcdProxyOptions.ControllerNamespace).Get(replicaSetName(etcdstorage))
+	replicaset, err := c.replicasetsLister.ReplicaSets(c.config.ControllerNamespace).Get(replicaSetName(etcdstorage))
 	if errors.IsNotFound(err) {
-		replicaset, err = c.kubeclientset.AppsV1().ReplicaSets(c.etcdProxyOptions.ControllerNamespace).Create(newReplicaSet(
-			etcdstorage, c.etcdProxyOptions.ControllerNamespace, etcdstorage.Name,
-			c.etcdProxyOptions.ProxyImage, c.etcdProxyOptions.CoreEtcd.URL,
-			c.etcdProxyOptions.CoreEtcd.CAConfigMapName, c.etcdProxyOptions.CoreEtcd.CertSecretName))
+		replicaset, err = c.kubeclientset.AppsV1().ReplicaSets(c.config.ControllerNamespace).Create(newReplicaSet(
+			etcdstorage, c.config.ControllerNamespace, etcdstorage.Name,
+			c.config.ProxyImage, c.config.CoreEtcd.URL,
+			c.config.CoreEtcd.CAConfigMapName, c.config.CoreEtcd.CertSecretName))
 	}
 
 	// If an error occurs during Get/Create, we'll requeue the item so we can
@@ -313,7 +295,7 @@ func (c *EtcdProxyController) syncHandler(key string) error {
 		replicaset.SetOwnerReferences([]metav1.OwnerReference{
 			*metav1.NewControllerRef(etcdstorage, etcdstoragev1alpha1.SchemeGroupVersion.WithKind("EtcdStorage")),
 		})
-		replicaset, err = c.kubeclientset.AppsV1().ReplicaSets(c.etcdProxyOptions.ControllerNamespace).Update(replicaset)
+		replicaset, err = c.kubeclientset.AppsV1().ReplicaSets(c.config.ControllerNamespace).Update(replicaset)
 		if err != nil {
 			msg := fmt.Sprintf(MessageErrResourceReclaimed, replicaset.Name)
 			c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrResourceReclaimed, msg)
@@ -325,10 +307,10 @@ func (c *EtcdProxyController) syncHandler(key string) error {
 
 	// Create Service to expose the etcdproxy pod.
 	serviceName := fmt.Sprintf("etcd-%s", etcdstorage.ObjectMeta.Name)
-	service, err := c.servicesLister.Services(c.etcdProxyOptions.ControllerNamespace).Get(serviceName)
+	service, err := c.servicesLister.Services(c.config.ControllerNamespace).Get(serviceName)
 	if errors.IsNotFound(err) {
-		service, err = c.kubeclientset.CoreV1().Services(c.etcdProxyOptions.ControllerNamespace).Create(newService(
-			etcdstorage, c.etcdProxyOptions.ControllerNamespace))
+		service, err = c.kubeclientset.CoreV1().Services(c.config.ControllerNamespace).Create(newService(
+			etcdstorage, c.config.ControllerNamespace))
 	}
 
 	// If an error occurs during Get/Create, we'll requeue the item so we can
@@ -345,7 +327,7 @@ func (c *EtcdProxyController) syncHandler(key string) error {
 		service.SetOwnerReferences([]metav1.OwnerReference{
 			*metav1.NewControllerRef(etcdstorage, etcdstoragev1alpha1.SchemeGroupVersion.WithKind("EtcdStorage")),
 		})
-		service, err = c.kubeclientset.CoreV1().Services(c.etcdProxyOptions.ControllerNamespace).Update(service)
+		service, err = c.kubeclientset.CoreV1().Services(c.config.ControllerNamespace).Update(service)
 		if err != nil {
 			msg := fmt.Sprintf(MessageErrResourceReclaimed, service.Name)
 			c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrResourceReclaimed, msg)
