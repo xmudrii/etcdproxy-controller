@@ -114,16 +114,3 @@ func (c *CoreEtcdOptions) Validate() error {
 
 	return utilerrors.NewAggregate(errors)
 }
-
-func (e *EtcdProxyControllerOptions) Config() (*etcdproxy.EtcdProxyControllerConfig, error) {
-	if err := e.Validate(); err != nil {
-		return nil, err
-	}
-
-	c := &etcdproxy.EtcdProxyControllerConfig{}
-	if err := e.ApplyTo(c); err != nil {
-		return nil, err
-	}
-
-	return c, nil
-}
