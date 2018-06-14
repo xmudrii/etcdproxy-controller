@@ -5,8 +5,6 @@ go:
 
 jobs:
   include:
-    - stage: Check headers
-      script: make verify-header
     - stage: Check go files
       script: make verify-ci
     - stage: Compile
