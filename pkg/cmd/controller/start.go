@@ -23,8 +23,13 @@ func NewCommandEtcdProxyControllerStart(stopCh <-chan struct{}) *cobra.Command {
 		Short: "Start EtcdProxyController",
 		Long:  "Start EtcdProxyController",
 		Run: func(c *cobra.Command, args []string) {
-			cfg, err := o.Config()
-			if err != nil {
+			cfg := &etcdproxy.EtcdProxyControllerConfig{}
+
+			if err := o.Validate(); err != nil {
+				glog.Fatal(err)
+			}
+
+			if err := o.ApplyTo(cfg); err != nil {
 				glog.Fatal(err)
 			}
 
