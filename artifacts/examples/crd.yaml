@@ -9,6 +9,8 @@ spec:
     kind: EtcdStorage
     plural: etcdstorages
   scope: Cluster
+  subresources:
+    status: {}
   validation:
     openAPIV3Schema:
       properties:

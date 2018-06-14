@@ -371,10 +371,29 @@ func (c *EtcdProxyController) syncHandler(key string) error {
 		c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ResourceReclaimed, msg)
 	}
 
-	// TODO(xmudrii): Add CR status updating once Status subresource is implemented.
+	// Finally, we update the status block of the EtcdStorage resource to reflect the
+	// current state of the world
+	deployedCondition := etcdstoragev1alpha1.EtcdStorageCondition{
+		Type:    etcdstoragev1alpha1.Deployed,
+		Status:  etcdstoragev1alpha1.ConditionTrue,
+		Reason:  "EtcdProxyDeployed",
+		Message: "etcdproxy replicaset and service created",
+	}
+	_, err = c.updateEtcdStorageStatus(etcdstorage, deployedCondition)
+	if err != nil {
+		return err
+	}
 
 	c.recorder.Event(etcdstorage, corev1.EventTypeNormal, SuccessSynced, MessageResourceSynced)
 	return nil
+}
+
+func (c *EtcdProxyController) updateEtcdStorageStatus(etcdstorage *etcdstoragev1alpha1.EtcdStorage,
+	condition etcdstoragev1alpha1.EtcdStorageCondition) (*etcdstoragev1alpha1.EtcdStorage, error) {
+	etcdstorageCopy := etcdstorage.DeepCopy()
+	etcdstoragev1alpha1.SetEtcdStorageCondition(etcdstorageCopy, condition)
+	etcdstorageCopy, err := c.etcdProxyClient.EtcdV1alpha1().EtcdStorages().UpdateStatus(etcdstorageCopy)
+	return etcdstorageCopy, err
 }
 
 // enqueueEtcdStorage takes a EtcdStorage resource and converts it into a namespace/name
