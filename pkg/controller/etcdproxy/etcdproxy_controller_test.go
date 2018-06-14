@@ -28,15 +28,15 @@ func TestSyncHandler(t *testing.T) {
 	tests := []struct {
 		name                   string
 		startingEtcdStorage    *v1alpha1.EtcdStorage
-		etcdProxyOptions       *EtcdProxyOptions
+		etcdProxyConfig        *EtcdProxyControllerConfig
 		expectedReplicaSetName string
 		expectedServiceName    string
 	}{
 		{
 			name:                "test simple creation",
 			startingEtcdStorage: etcdStorage("test-1"),
-			etcdProxyOptions: &EtcdProxyOptions{
-				CoreEtcd: CoreEtcdOptions{
+			etcdProxyConfig: &EtcdProxyControllerConfig{
+				CoreEtcd: &CoreEtcdConfig{
 					URL:             "https://test.etcd.svc:2379",
 					CAConfigMapName: "etcd-coreserving-ca",
 					CertSecretName:  "etcd-coreserving-cert",
@@ -50,8 +50,8 @@ func TestSyncHandler(t *testing.T) {
 		{
 			name:                "test simple creation with non-default namespace",
 			startingEtcdStorage: etcdStorage("test-2"),
-			etcdProxyOptions: &EtcdProxyOptions{
-				CoreEtcd: CoreEtcdOptions{
+			etcdProxyConfig: &EtcdProxyControllerConfig{
+				CoreEtcd: &CoreEtcdConfig{
 					URL:             "https://test.etcd.svc:2379",
 					CAConfigMapName: "etcd-coreserving-ca",
 					CertSecretName:  "etcd-coreserving-cert",
@@ -85,7 +85,7 @@ func TestSyncHandler(t *testing.T) {
 				servicesLister:    svclisters.NewServiceLister(indexer),
 				recorder:          &record.FakeRecorder{},
 
-				etcdProxyOptions: tc.etcdProxyOptions,
+				config: tc.etcdProxyConfig,
 			}
 			err := c.syncHandler(tc.startingEtcdStorage.Name)
 			if err != nil {
@@ -93,7 +93,7 @@ func TestSyncHandler(t *testing.T) {
 			}
 
 			// Check is ReplicaSet created.
-			_, err = kubeClient.Apps().ReplicaSets(tc.etcdProxyOptions.ControllerNamespace).Get(tc.expectedReplicaSetName, metav1.GetOptions{})
+			_, err = kubeClient.Apps().ReplicaSets(tc.etcdProxyConfig.ControllerNamespace).Get(tc.expectedReplicaSetName, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
 				t.Fatalf("replicaset not found: %v", err)
 			}
@@ -102,7 +102,7 @@ func TestSyncHandler(t *testing.T) {
 			}
 
 			// Check is Service created.
-			_, err = kubeClient.Core().Services(tc.etcdProxyOptions.ControllerNamespace).Get(tc.expectedServiceName, metav1.GetOptions{})
+			_, err = kubeClient.Core().Services(tc.etcdProxyConfig.ControllerNamespace).Get(tc.expectedServiceName, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
 				t.Fatalf("service not found: %v", err)
 			}

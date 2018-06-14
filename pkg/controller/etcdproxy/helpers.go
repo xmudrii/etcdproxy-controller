@@ -2,8 +2,6 @@ package etcdproxy
 
 import (
 	"fmt"
-	"io/ioutil"
-	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -142,19 +140,4 @@ func serviceName(etcdstorage *etcdstoragev1alpha1.EtcdStorage) string {
 // flagfromString returns double dash prefixed flag calculated from provided key and value.
 func flagfromString(key, value string) string {
 	return fmt.Sprintf("--%s=%s", key, value)
-}
-
-// ControllerNamespace returns name of the namespace where controller is located. The namespace name is obtained
-// from the "/var/run/secrets/kubernetes.io/serviceaccount/namespace" file. In case it's not possible to obtain it
-// from that file, the function resorts to the default name, `kube-apiserver-storage`.
-func ControllerNamespace(namespace string) (string, error) {
-	if namespace != "" {
-		return namespace, nil
-	} else if data, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace"); err == nil {
-		if ns := strings.TrimSpace(string(data)); len(ns) > 0 {
-			return ns, nil
-		}
-	}
-
-	return "", fmt.Errorf("unable to detect controller namespace")
 }
