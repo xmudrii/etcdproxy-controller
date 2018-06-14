@@ -9,7 +9,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// CoreEtcd type is used to wire the core etcd information used by controller to create ReplicaSets.
+// CoreEtcdOptions type is used to wire the core etcd information used by controller to create ReplicaSets.
 type CoreEtcdOptions struct {
 	URL             string
 	CAConfigMapName string
@@ -31,6 +31,7 @@ type EtcdProxyControllerOptions struct {
 	ProxyImage string
 }
 
+// NewCoreEtcdOptions returns CoreEtcdOptions struct filled with default values.
 func NewCoreEtcdOptions() *CoreEtcdOptions {
 	return &CoreEtcdOptions{
 		URL:             "",
@@ -39,6 +40,7 @@ func NewCoreEtcdOptions() *CoreEtcdOptions {
 	}
 }
 
+// NewEtcdProxyControllerOptions returns EtcdProxyControllerOptions struct filled with default values.
 func NewEtcdProxyControllerOptions() *EtcdProxyControllerOptions {
 	return &EtcdProxyControllerOptions{
 		CoreEtcd:            NewCoreEtcdOptions(),
@@ -48,6 +50,7 @@ func NewEtcdProxyControllerOptions() *EtcdProxyControllerOptions {
 	}
 }
 
+// AddFlags adds flags to the root command.
 func (e *EtcdProxyControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVarP(&e.CoreEtcd.URL, "etcd-core-url", "u", e.CoreEtcd.URL, "The address of the core etcd server.")
 	fs.StringVar(&e.CoreEtcd.CAConfigMapName, "etcd-core-ca-configmap", e.CoreEtcd.CAConfigMapName, "The name of the ConfigMap where CA is stored.")
@@ -58,6 +61,7 @@ func (e *EtcdProxyControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&e.ProxyImage, "etcd-proxy-image", e.ProxyImage, "The image to be used for creating etcd proxy pods.")
 }
 
+// ApplyTo applies provided Options struct to the provided Config struct.
 func (e *EtcdProxyControllerOptions) ApplyTo(c *etcdproxy.EtcdProxyControllerConfig) error {
 	var err error
 
@@ -77,6 +81,7 @@ func (e *EtcdProxyControllerOptions) ApplyTo(c *etcdproxy.EtcdProxyControllerCon
 	return nil
 }
 
+// Validate verifies are EtcdProxyControllerOptions and CoreEtcdOptions struct correctly populated.
 func (e *EtcdProxyControllerOptions) Validate() error {
 	errors := []error{}
 
@@ -97,6 +102,7 @@ func (e *EtcdProxyControllerOptions) Validate() error {
 	return utilerrors.NewAggregate(errors)
 }
 
+// Validate verifies is CoreEtcdOptions struct correctly populated.
 func (c *CoreEtcdOptions) Validate() error {
 	errors := []error{}
 

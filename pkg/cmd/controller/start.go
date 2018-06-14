@@ -16,6 +16,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// NewCommandEtcdProxyControllerStart returns controller root command.
 func NewCommandEtcdProxyControllerStart(stopCh <-chan struct{}) *cobra.Command {
 	o := options.NewEtcdProxyControllerOptions()
 
@@ -43,6 +44,7 @@ func NewCommandEtcdProxyControllerStart(stopCh <-chan struct{}) *cobra.Command {
 	return cmd
 }
 
+// RunController runs EtcdProxyController.
 func RunController(config *etcdproxy.EtcdProxyControllerConfig, stopCh <-chan struct{}) error {
 	controllerNamespace, err := controllerNamespace(config.ControllerNamespace)
 	if err != nil {
@@ -69,11 +71,7 @@ func RunController(config *etcdproxy.EtcdProxyControllerConfig, stopCh <-chan st
 	go kubeInformersNamespaced.Start(stopCh)
 	go etcdproxyInformers.Start(stopCh)
 
-	if err = controller.Run(2, stopCh); err != nil {
-		return err
-	}
-
-	return nil
+	return controller.Run(2, stopCh)
 }
 
 // controllerNamespace returns name of the namespace where controller is located. The namespace name is obtained
