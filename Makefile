@@ -51,7 +51,7 @@ push: ## push to the docker registry
 
 build-docker: ## build docker images
 	$(DOCKER) build -t $(REGISTRY)/$(TARGET):$(GIT_REF) .
-    $(DOCKER) build -t $(REGISTRY)/$(TARGET):latest .
+	$(DOCKER) build -t $(REGISTRY)/$(TARGET):latest .
 
 build: authors clean build-linux-amd64 build-darwin-amd64 build-windows-amd64 ## Build etcdproxy-controller executable for Linux, macOS and Windows.
 
