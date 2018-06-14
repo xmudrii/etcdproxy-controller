@@ -83,10 +83,6 @@ test: ## Run tests.
 verify-ci: install-tools ## Run code checks
 	PKGS="${GOFILES}" GOFMT="gofmt" ./hack/verify-ci.sh
 
-verify-header: ## Check if the headers are valid. This is ran in CI.
-	./hack/verify-header-go.sh
-	./hack/verify-header-sh.sh
-
 .PHONY: install-tools
 install-tools:
 	GOIMPORTS_CMD=$(shell command -v goimports 2> /dev/null)
