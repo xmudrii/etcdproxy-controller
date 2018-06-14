@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/golang/glog"
 	"github.com/spf13/cobra"
 	clientset "github.com/xmudrii/etcdproxy-controller/pkg/client/clientset/versioned"
 	informers "github.com/xmudrii/etcdproxy-controller/pkg/client/informers/externalversions"
@@ -21,16 +22,15 @@ func NewCommandEtcdProxyControllerStart(stopCh <-chan struct{}) *cobra.Command {
 	cmd := &cobra.Command{
 		Short: "Start EtcdProxyController",
 		Long:  "Start EtcdProxyController",
-		RunE: func(c *cobra.Command, args []string) error {
+		Run: func(c *cobra.Command, args []string) {
 			cfg, err := o.Config()
 			if err != nil {
-				return err
+				glog.Fatal(err)
 			}
 
 			if err := RunController(cfg, stopCh); err != nil {
-				return err
+				glog.Fatal(err)
 			}
-			return nil
 		},
 	}
 
