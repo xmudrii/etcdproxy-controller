@@ -126,5 +126,5 @@ spec:
         image: xmudrii/etcdproxy-controller:latest
         command:
           - /etcdproxy-controller
-          - "-etcd-core-url=https://etcd-svc-1.etcd.svc:2379"
+          - "--etcd-core-url=https://etcd-svc-1.etcd.svc:2379"
         imagePullPolicy: Always
