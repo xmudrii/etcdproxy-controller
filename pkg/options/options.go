@@ -54,7 +54,7 @@ func (e *EtcdProxyControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&e.CoreEtcd.CertSecretName, "etcd-core-certs-secret", e.CoreEtcd.CertSecretName, "The name of the Secret where client certificates are stored.")
 
 	fs.StringVarP(&e.ControllerNamespace, "namespace", "n", e.ControllerNamespace, "Name of the namespace where controller is deployed.")
-	fs.StringVarP(&e.KubeconfigPath, "kubeconfig", "k", e.KubeconfigPath, "Path to kubeconfig (required only if running out-cluster).")
+	fs.StringVarP(&e.KubeconfigPath, "kubeconfig", "k", e.KubeconfigPath, "Path to kubeconfig (required only if running out-of-cluster).")
 	fs.StringVar(&e.ProxyImage, "etcd-proxy-image", e.ProxyImage, "The image to be used for creating etcd proxy pods.")
 }
 
@@ -84,10 +84,6 @@ func (e *EtcdProxyControllerOptions) Validate() error {
 
 	if e.ControllerNamespace == "" {
 		errors = append(errors, fmt.Errorf("controller namespace name empty"))
-	}
-
-	if e.KubeconfigPath == "" {
-		errors = append(errors, fmt.Errorf("kubeconfig path empty"))
 	}
 
 	if e.ProxyImage == "" {
