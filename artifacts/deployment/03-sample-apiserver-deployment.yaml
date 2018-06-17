@@ -1,0 +1,58 @@
+# Make sure the EtcdProxy Controller and API server prerequisites are deployed before deploying the manifest.
+---
+# Creates the etcd stroage for the aggregated API server.
+# The etcd is available on http://sample-apiserver.kube-apiserver-storage.svc:2379.
+apiVersion: etcd.xmudrii.com/v1alpha1
+kind: EtcdStorage
+metadata:
+  name: k8s-sample-apiserver
+---
+# Deploys the sample-apiserver (https://github.com/kubernetes/sample-apiserver).
+# The Deployment uses the xmudrii/kube-sample-apiserver image.
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: apiserver
+  namespace: k8s-sample-apiserver
+spec:
+  selector:
+    matchLabels:
+      apiserver: sample-apiserver
+  template:
+    metadata:
+      labels:
+        apiserver: sample-apiserver
+    spec:
+      serviceAccountName: apiserver
+      containers:
+      - name: sample-apiserver
+        image: xmudrii/kube-sample-apiserver
+        imagePullPolicy: Always
+        command: ["/kube-sample-apiserver", "--etcd-servers=http://etcd-k8s-sample-apiserver.kube-apiserver-storage.svc:2379"]
+        volumeMounts:
+        - mountPath: /etc/etcd-certs/ca
+          name: etcd-serving-ca
+        - mountPath: /etc/etcd-certs/client
+          name: etcd-client-cert
+      volumes:
+      - name: etcd-serving-ca
+        configMap:
+          name: etcd-serving-ca
+      - name: etcd-client-cert
+        secret:
+          secretName: etcd-client-cert
+---
+# APIService used to register the API and the API resources with the Kubernetes API.
+apiVersion: apiregistration.k8s.io/v1beta1
+kind: APIService
+metadata:
+  name: v1alpha1.wardle.k8s.io
+spec:
+  insecureSkipTLSVerify: true # TODO: include certificates for the sample-apiserver.
+  group: wardle.k8s.io
+  groupPriorityMinimum: 1000
+  versionPriority: 15
+  service:
+    name: api
+    namespace: k8s-sample-apiserver
+  version: v1alpha1

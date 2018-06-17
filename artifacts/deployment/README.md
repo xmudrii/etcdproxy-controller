@@ -1,26 +1,50 @@
-# `EtcdProxyController` manifest
+# Deploying `EtcdProxy` Controller
 
-This directory contains manifest for deploying the `EtcdProxyController` in the cluster. It creates the following resources:
-* **namespace/kube-apiserver-storage** - namespace where controller and resources managed by controller are deployed.
-* **serviceaccount/etcdproxy-controller-sa** - ServiceAccount used by Controller for managing EtcdStorage objects, ReplicaSets and Services.
-* **serviceaccount/etcdproxy-sa** - ServiceAccount used by EtcdProxy Pods.
-* **clusterrole/etcdproxy-crd-clusterrole** - ClusterRole allowing **etcdproxy-controller-sa** ServiceAccount to update EtcdStorage status.
-* **role/etcdproxy-controller-role** - Role allowing **etcdproxy-controller-sa** ServiceAccount to manage ReplicaSets, Services, ConfigMap and Secrets in the **kube-apiserver-storage** namespace.
+This directory contains manifest for deploying the `EtcdProxy` Controller in the cluster. The manifest deploys the following resources:
+
+* **namespace/kube-apiserver-storage** - namespace for the EtcdProxyController to lives in,
+
+* **sa/etcdproxy-controller-sa** - ServiceAccount for managing EtcdStorage objects, ReplicaSets and Services, Secrets and ConfigMaps,
+* **sa/etcdproxy-sa** - ServiceAccount used by EtcdProxy Pods. Does not have any permissions,
+
+* **clusterrole/etcdproxy-crd-clusterrole** - ClusterRole for managing EtcdStorages.
 * **clusterrolebinding/etcdproxy-crd-clusterrolebinding** - Binds **clusterrole/etcdproxy-crd-clusterrole** to **serviceaccount/etcdproxy-controller-sa**.
+
+* **role/etcdproxy-controller-role** - Role for managing ReplicaSets, Services, ConfigMap and Secrets in the **kube-apiserver-storage** namespace.
 * **rolebinding/etcdproxy-controller-rolebinding** - Binds **role/etcdproxy-controller-role** to **serviceaccount/etcdproxy-controller-sa**.
-* **customresourcedefinition/etcdstorages.etcd.xmudrii.com** - EtcdStorage CRD used to manage etcd proxies.
-* **deployment/etcdproxy-controller-deployment** - Deployment for the `EtcdProxyController`.
 
-## RBAC Rules
+* **customresourcedefinition/etcdstorages.etcd.xmudrii.com** - CRD defining the EtcdStorage type for managing etcd proxies,
+* **deployment/etcdproxy-controller-deployment** - Controller Deployment.
 
-The **clusterrole/etcdproxy-crd-clusterrole** allows controller to get the EtcdStorage instances and update to the Status.
-The role is supposed to be bound to the Controller's ServiceAccount.
+## Deploying the core `etcd`
 
-The **role/etcdproxy-controller-role** ensures Controller can manage resources used by the controller (ReplicaSets, Services, ConfigMaps, Secrets). The role is supposed to be bound to the Controller's Service Account.
+The deployment manifest assumes you have the core `etcd` deployed and exposed on `https://etcd-svc-1.etcd.svc:2379`.
+The URL can be changed by modifying the `--etcd-core-url` flag in the `00-etcdproxy-controller.yaml` file.
 
-## Discovering the core `etcd`
+There is an example `etcd` deploymend manifest located in the [`artifacts/etcd`](https://github.com/xmudrii/etcdproxy-controller/tree/master/artifacts/etcd) directory.
 
-The deployment manifest assumes:
-* The core `etcd` is available on the `https://etcd-svc-1.etcd.svc:2379` URL. To modify it, change the command in the Deployment object (`-etcd-core-url` flag).
-* The CA certificate for the core etcd is stored in the ConfigMap called `etcd-coreserving-ca`, in the controller's namespace. This can be configured using the `-etcd-core-ca-configmap` flag which takes the name of the ConfigMap, in the controller's namespace.
-* The client certificate and key for the core etcd are stored in the Secret called `etcd-coreserving-cert`, in the controller's namespace. This can be configured using the `-etcd-core-certs-secret` flag which takes the name of the Secret, in the controller's namespace.
+## Deploying certificates
+
+Before creating the EtcdStorage instances, it's required to create the ConfigMap and Secret containing the core etcd CA certifiacte, and client certificate and key.
+
+The CA certificate is deployed in the ConfigMap called `etcd-coreserving-ca`, in the controller namespace. The ConfigMap name can be changed by adding the `--etcd-core-ca-configmap` flag to controller command in the `00-etcdproxy-controller.yaml` file.
+
+The client certificate and key are both deployed in the generic Secret called `etcd-coreserving-cert`. The Secret name can be changed by adding the `--etcd-core-certs-secret` flag to controller command in the `00-etcdproxy-controller.yaml` file.
+
+Deploying an EtcdStorage resoruce without the requrired ConfigMap and Secret in place causes the EtcdProxy pod to hang in the `Creating` condition.
+
+## Creating the proxied `etcd`
+
+To create the etcd instance for the aggregated API server, deploy the `EtcdStorage` manifest. Once the manifest is deployed, the controller creates and exposes the etcd proxy running against the `etcd` namespace named same as the `EtcdStorage` instance.
+
+The proxied `etcd` is exposed on `http://etcd-<etcdstorage-name>.<controller-namespace>.svc:2379`.
+
+## Deploying the `sample-apiserver`
+
+The [`sample-apiserver`](https://github.com/kubernetes/sample-apiserver) can be used to test the EtcdProxy Controller, by pointing the API server to use the proxied etcd. The API server can be deployed using the `01-apiserver-prerequisites.yaml` and `03-apiserver-deployment.yaml` manifests.
+
+The `01-apiserver-prerequisites.yaml` manifest deploys resources needed for running the API server (Namespace, APIService, RoleBindings, Service). It must be deployed before the `03-apiserver-deployment.yaml` manifest, otherwise the deployment will fail.
+
+The `03-apiserver-deployment.yaml` manifest creates the `EtcdStorage` instance named `kube-sample-apiserver`, which represents the `etcd` instance for the API server. Once deployed, the `etcd` is available on `http://etcd-kube-sample-apiserver.kube-apiserver-storage.svc:2379`.
+
+The manifest deploys the `sample-apiserver` from the [`xmudrii/kube-sample-apiserver` image](https://hub.docker.com/r/xmudrii/kube-sample-apiserver/), which is using the Alpine 3.6 image and is based on the `sample-apiserver` from the [commit `4618274fbc9476e7f1a6a8771962f1eee6a83047`](https://github.com/kubernetes/sample-apiserver/commit/4618274fbc9476e7f1a6a8771962f1eee6a83047).

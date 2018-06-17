@@ -1,0 +1,50 @@
+# This creates the Secrets and ConfigMaps in the aggregated API server namespace,
+# along with RBAC rules allowing the EtcdProxy Controller to access those resources.
+---
+# Secret for storing the client certificate and key used to access the proxied etcd.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: etcd-client-cert
+  namespace: k8s-sample-apiserver
+type: Opaque
+data:
+---
+# ConfigMap used to store the CA certificate for the proxied etcd.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: etcd-serving-ca
+  namespace: k8s-sample-apiserver
+data:
+---
+# Role to allow getting and updating the Secret and ConfigMap.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: etcdproxy-manage-certs
+  namespace: k8s-sample-apiserver
+rules:
+- apiGroups: ["v1"]
+  resources: ["secrets"]
+  verbs: ["get", "update", "patch"]
+  resourceNames: ["etcd-client-cert"]
+- apiGroups: ["v1"]
+  resources: ["configmaps"]
+  verbs: ["get", "update", "patch"]
+  resourceNames: ["etcd-serving-ca"]
+---
+# Bind the etcdproxy-manage-certs to the EtcdProxy Controller ServiceAccount.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: etcdproxy-manage-certs-rb
+  namespace: k8s-sample-apiserver
+subjects:
+- kind: ServiceAccount
+  name: etcdproxy-controller-sa
+  namespace: kube-apiserver-storage
+roleRef:
+  kind: Role
+  name: etcdproxy-manage-certs
+  apiGroup: rbac.authorization.k8s.io
