@@ -32,7 +32,7 @@ func IsEtcdStorageConditionTrue(es *EtcdStorage, conditionType EtcdStorageCondit
 	return IsEtcdStorageConditionPresentAndEqual(es, conditionType, ConditionTrue)
 }
 
-// IsEtcdStorageConditionTrue checks is condition present and false.
+// IsEtcdStorageConditionFalse checks is condition present and false.
 func IsEtcdStorageConditionFalse(es *EtcdStorage, conditionType EtcdStorageConditionType) bool {
 	return IsEtcdStorageConditionPresentAndEqual(es, conditionType, ConditionFalse)
 }
@@ -49,6 +49,8 @@ func IsEtcdStorageConditionEquivalent(l, r *EtcdStorageCondition) bool {
 	return l.Message == r.Message && l.Reason == r.Reason && l.Status == r.Status && l.Type == r.Type
 }
 
+// SetEtcdStorageCondition applies Condition to the EtcdStorage instance provided as the argument.
+// If the condition already exists in the EtcdStorage instance, it's overwritten.
 func SetEtcdStorageCondition(es *EtcdStorage, newCondition EtcdStorageCondition) {
 	existingCondition := FindEtcdStorageCondition(es, newCondition.Type)
 	if existingCondition == nil {

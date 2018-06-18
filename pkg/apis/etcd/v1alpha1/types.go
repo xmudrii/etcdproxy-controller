@@ -4,17 +4,20 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// ConditionStatus represents status of the EtcdStorage condition.
 type ConditionStatus string
 
-// These are valid condition statuses. "ConditionTrue" means a resource is in the condition.
-// "ConditionFalse" means a resource is not in the condition. "ConditionUnknown" means controller
-// can't decide if a resource is in the condition or not.
+// These are valid condition statuses: ConditionTrue, ConditionFalse, ConditionUnknown.
 const (
-	ConditionTrue    ConditionStatus = "True"
-	ConditionFalse   ConditionStatus = "False"
+	// ConditionTrue means a resource is in the condition.
+	ConditionTrue ConditionStatus = "True"
+	// ConditionFalse means a resource is not in the condition.
+	ConditionFalse ConditionStatus = "False"
+	// ConditionUnknown means controller can't decide if a EtcdStorage resource is in the condition or not.
 	ConditionUnknown ConditionStatus = "Unknown"
 )
 
+// EtcdStorageConditionType represents condition of the EtcdStorage resource.
 type EtcdStorageConditionType string
 
 const (
