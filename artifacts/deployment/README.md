@@ -41,10 +41,11 @@ The proxied `etcd` is exposed on `http://etcd-<etcdstorage-name>.<controller-nam
 
 ## Deploying the `sample-apiserver`
 
-The [`sample-apiserver`](https://github.com/kubernetes/sample-apiserver) can be used to test the EtcdProxy Controller, by pointing the API server to use the proxied etcd. The API server can be deployed using the `01-apiserver-prerequisites.yaml` and `03-apiserver-deployment.yaml` manifests.
+The [`sample-apiserver`](https://github.com/kubernetes/sample-apiserver) can be used to test the EtcdProxy Controller, by pointing the API server to use the proxied etcd.
 
-The `01-apiserver-prerequisites.yaml` manifest deploys resources needed for running the API server (Namespace, APIService, RoleBindings, Service). It must be deployed before the `03-apiserver-deployment.yaml` manifest, otherwise the deployment will fail.
+The following manifests are used to deploy the `sample-apiserver`:
+* `01-sample-apiserver-prerequisites.yaml` – creates a namespace, Service and Role/RoleBindings needed by the `sample-apiserver`.
+* `02-sample-apiserver-certs.yaml` – creates ConfigMap, Secrets and RBAC roles for the proxied etcd certificates.
+* `03-sample-apiserver-deployment.yaml` – creates an EtcdStorage resource, which provides the etcd storage for the API server, `sample-apiserver` ReplicaSet, and APIService to register the `sample-apiserver` with the Kubernetes API.
 
-The `03-apiserver-deployment.yaml` manifest creates the `EtcdStorage` instance named `kube-sample-apiserver`, which represents the `etcd` instance for the API server. Once deployed, the `etcd` is available on `http://etcd-kube-sample-apiserver.kube-apiserver-storage.svc:2379`.
-
-The manifest deploys the `sample-apiserver` from the [`xmudrii/kube-sample-apiserver` image](https://hub.docker.com/r/xmudrii/kube-sample-apiserver/), which is using the Alpine 3.6 image and is based on the `sample-apiserver` from the [commit `4618274fbc9476e7f1a6a8771962f1eee6a83047`](https://github.com/kubernetes/sample-apiserver/commit/4618274fbc9476e7f1a6a8771962f1eee6a83047).
+The manifest uses the [`xmudrii/kube-sample-apiserver`](https://hub.docker.com/r/xmudrii/kube-sample-apiserver/) image, which is based on Alpine 3.6 and is built on `sample-apiserver` commit [`4618274fbc9476e7f1a6a8771962f1eee6a83047`](https://github.com/kubernetes/sample-apiserver/commit/4618274fbc9476e7f1a6a8771962f1eee6a83047).

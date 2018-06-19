@@ -1,4 +1,6 @@
-# Make sure the EtcdProxy Controller and API server prerequisites are deployed before deploying the manifest.
+# This manifest creates an EtcdStorage resource, which provides the etcd storage for the API server,
+# and deploys the sample-apiserver from the `xmudrii/k8s-sample-apiserver` image.
+# The APIService resource is also created to register the API with the Kubernetes API Server.
 ---
 # Creates the etcd stroage for the aggregated API server.
 # The etcd is available on http://sample-apiserver.kube-apiserver-storage.svc:2379.
@@ -15,6 +17,7 @@ metadata:
   name: apiserver
   namespace: k8s-sample-apiserver
 spec:
+  replicas: 1
   selector:
     matchLabels:
       apiserver: sample-apiserver
@@ -48,7 +51,11 @@ kind: APIService
 metadata:
   name: v1alpha1.wardle.k8s.io
 spec:
-  insecureSkipTLSVerify: true # TODO: include certificates for the sample-apiserver.
+  # When running the sample-apiserver, self-generated certificates are generated to ensure secure communication.
+  # However, as those certificates are self-generated, TLS errors can occur, so we're disabling checks to prevent errors.
+  # We're also providing the CA certificate to the sample-apiserver, to let users use the API with their client certificate.
+  # The cilent certificates for the sample-apiserver are provided in the 'sample-apiserver-clientcert' Secret.
+  insecureSkipTLSVerify: true 
   group: wardle.k8s.io
   groupPriorityMinimum: 1000
   versionPriority: 15

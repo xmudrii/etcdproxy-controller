@@ -1,5 +1,5 @@
-# The Prerequisites manifest deploys resources needed to run and discover the k8s-sample-apiserver.
-# Those resources include the namespace, the API Service, needed RoleBindings and a Service.
+# The Prerequisites manifest deploys resources needed to run and discover the sample-apiserver.
+# Those resources include the namespace, needed Roles and RoleBindings and a Service.
 ---
 # Namespace where the API server and all related resources are deployed.
 apiVersion: v1
