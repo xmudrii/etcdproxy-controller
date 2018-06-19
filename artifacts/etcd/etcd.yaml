@@ -1,29 +1,91 @@
+---
+# Namespace where the core etcd is deployed.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: etcd
+---
+# CA certificate for the core etcd.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: etcd-coreserving-ca
+  namespace: etcd
+data:
+  ca.pem: |
+    -----BEGIN CERTIFICATE-----
+    MIIB5DCCAYqgAwIBAgIUJJ9xZX5JIg6Wb9ve9N7xUOAcx54wCgYIKoZIzj0EAwIw
+    UDELMAkGA1UEBhMCVVMxCzAJBgNVBAgTAkNBMRYwFAYDVQQHEw1TYW4gRnJhbmNp
+    c2NvMRwwGgYDVQQDExNldGNkLXN2Yy0xLmV0Y2Quc3ZjMB4XDTE4MDYxNzIwMDYw
+    MFoXDTIzMDYxNjIwMDYwMFowUDELMAkGA1UEBhMCVVMxCzAJBgNVBAgTAkNBMRYw
+    FAYDVQQHEw1TYW4gRnJhbmNpc2NvMRwwGgYDVQQDExNldGNkLXN2Yy0xLmV0Y2Qu
+    c3ZjMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEbVcB33hMNP1G0T5E65YdEiZ1
+    wsyEJXfn94dL4/O1vNjfRiImuNwN5gJPy8baG444osb1yfH5asxTIAzvtQalaKNC
+    MEAwDgYDVR0PAQH/BAQDAgEGMA8GA1UdEwEB/wQFMAMBAf8wHQYDVR0OBBYEFKtG
+    dEHYxzQhgNM9PNStm8BB+ON5MAoGCCqGSM49BAMCA0gAMEUCIQDA8DX3tSU5jeuD
+    E6WVeDCbXZfTiCuUMgAlcM8GXDTV5QIgN0ZgOL7hS7XAMwhTVUbhuKWi+IRZi3wL
+    +r9bAo3ITMg=
+    -----END CERTIFICATE-----
+---
+# Server certificate and key for the core etcd.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: etcd-coreserver-cert
+  namespace: etcd
+type: Opaque
+data:
+  server.pem: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUNPekNDQWVHZ0F3SUJBZ0lVZVd5Q3pjWUJsOWljLytjZWwvL3I2WEw1Yjh3d0NnWUlLb1pJemowRUF3SXcKVURFTE1Ba0dBMVVFQmhNQ1ZWTXhDekFKQmdOVkJBZ1RBa05CTVJZd0ZBWURWUVFIRXcxVFlXNGdSbkpoYm1OcApjMk52TVJ3d0dnWURWUVFERXhObGRHTmtMWE4yWXkweExtVjBZMlF1YzNaak1CNFhEVEU0TURZeE56SXdNRFl3Ck1Gb1hEVEl6TURZeE5qSXdNRFl3TUZvd1VERUxNQWtHQTFVRUJoTUNWVk14Q3pBSkJnTlZCQWdUQWtOQk1SWXcKRkFZRFZRUUhFdzFUWVc0Z1JuSmhibU5wYzJOdk1Sd3dHZ1lEVlFRREV4TmxkR05rTFhOMll5MHhMbVYwWTJRdQpjM1pqTUZrd0V3WUhLb1pJemowQ0FRWUlLb1pJemowREFRY0RRZ0FFSXJFL25aVDg0TXZIemY4cStDU2YzOEtvCnZvcHc2VnV0MHNjQlhoTVpGVWdBOGEyd2hLYkMvQzAvRXFVdEp2bkg1c0NXdWRjSk5LWmN3dXoyWUR6bys2T0IKbURDQmxUQU9CZ05WSFE4QkFmOEVCQU1DQmFBd0V3WURWUjBsQkF3d0NnWUlLd1lCQlFVSEF3RXdEQVlEVlIwVApBUUgvQkFJd0FEQWRCZ05WSFE0RUZnUVVaVUZBSmZQYUFMczM1bS9Qd3RpdzcwcXI2YWN3UVFZRFZSMFJCRG93Ck9JSVRaWFJqWkMxemRtTXRNUzVsZEdOa0xuTjJZNEloWlhSalpDMXpkbU10TVM1bGRHTmtMbk4yWXk1amJIVnoKZEdWeUxteHZZMkZzTUFvR0NDcUdTTTQ5QkFNQ0EwZ0FNRVVDSVFEL2dxVmg4S2ljQ2hUWG9Ic0lGcVFJMEhGYgpBZ2dQdWx2VmtVUW9laXhQbEFJZ0FpTUg2UnQ0QmpyY0l6Ui9YbEdSMW5URmlFUHFRc2JRd2cwRTRPRUlqV289Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+  server-key.pem: LS0tLS1CRUdJTiBFQyBQUklWQVRFIEtFWS0tLS0tCk1IY0NBUUVFSURBOWdXNFo2UHM3NTliWkd0cDJRL2dMZ3JTSnZXQ2hrOE5kUzREL0tCWkRvQW9HQ0NxR1NNNDkKQXdFSG9VUURRZ0FFSXJFL25aVDg0TXZIemY4cStDU2YzOEtvdm9wdzZWdXQwc2NCWGhNWkZVZ0E4YTJ3aEtiQwovQzAvRXFVdEp2bkg1c0NXdWRjSk5LWmN3dXoyWUR6byt3PT0KLS0tLS1FTkQgRUMgUFJJVkFURSBLRVktLS0tLQo=
+---
+# The core etcd pod.
 apiVersion: v1
 kind: Pod
 metadata:
   name: core-etcd
+  namespace: etcd
   labels:
-    app: etcd
+    etcd: core
 spec:
   containers:
   - name: etcd
     image: quay.io/coreos/etcd:v3.2.18
     env:
     - name: ETCD_CERT_FILE
-      value: "/etc/certs/server.pem"
+      value: "/etc/etcd-servercert/cert/server.pem"
     - name: ETCD_KEY_FILE
-      value: "/etc/certs/server-key.pem"
+      value: "/etc/etcd-servercert/cert/server-key.pem"
     - name: ETCD_TRUSTED_CA_FILE
-      value: "/etc/certs/ca.pem"
+      value: "/etc/etcd-servercert/ca/ca.pem"
     - name: ETCD_ADVERTISE_CLIENT_URLS
       value: "https://0.0.0.0:2379"
     - name: ETCD_LISTEN_CLIENT_URLS
       value: "https://0.0.0.0:2379"
     volumeMounts:
-    - name: server-certs
-      mountPath: "/etc/certs"
+    - name: etcd-coreserving-ca
+      mountPath: "/etc/etcd-servercert/ca"
+      readOnly: true
+    - name: etcd-coreserver-cert
+      mountPath: "/etc/etcd-servercert/cert"
       readOnly: true
   volumes:
-  - name: server-certs
+  - name: etcd-coreserver-cert
     secret:
-      secretName: server-certs
+      secretName: etcd-coreserver-cert
+  - name: etcd-coreserving-ca
+    configMap:
+      name: etcd-coreserving-ca
+---
+# Service exposing the core etcd as 'etcd-svc-1'.
+kind: Service
+apiVersion: v1
+metadata:
+  name: etcd-svc-1
+  namespace: etcd
+spec:
+  selector:
+    etcd: core
+  ports:
+  - protocol: TCP
+    port: 2379
+    targetPort: 2379
