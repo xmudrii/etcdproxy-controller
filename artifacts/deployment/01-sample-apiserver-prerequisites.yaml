@@ -1,0 +1,85 @@
+# The Prerequisites manifest deploys resources needed to run and discover the sample-apiserver.
+# Those resources include the namespace, needed Roles and RoleBindings and a Service.
+---
+# Namespace where the API server and all related resources are deployed.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: k8s-sample-apiserver
+---
+# ServiceAccount to be used by the k8s-sample-apiserver.
+kind: ServiceAccount
+apiVersion: v1
+metadata:
+  name: apiserver
+  namespace: k8s-sample-apiserver
+---
+# ClusterRoleBinding to allow API delegation.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: k8s-sample-apiserver:system:auth-delegator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+- kind: ServiceAccount
+  name: apiserver
+  namespace: k8s-sample-apiserver
+---
+# RoleBinding used for authentication.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: wardle-auth-reader
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: extension-apiserver-authentication-reader
+subjects:
+- kind: ServiceAccount
+  name: apiserver
+  namespace: k8s-sample-apiserver
+---
+# ClusterRole used to allow API server to use Admission Webhooks.
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: aggregated-apiserver-clusterrole
+rules:
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: ["get", "watch", "list"]
+- apiGroups: ["admissionregistration.k8s.io"]
+  resources: ["mutatingwebhookconfigurations", "validatingwebhookconfigurations"]
+  verbs: ["get", "watch", "list"]
+---
+# ClusterRoleBinding binding webhooks rule to API server service account.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sample-apiserver-clusterrolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: aggregated-apiserver-clusterrole
+subjects:
+- kind: ServiceAccount
+  name: apiserver
+  namespace: k8s-sample-apiserver
+---
+# This Service exposes the API provided by the k8s-sample-apiserver.
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: k8s-sample-apiserver
+spec:
+  ports:
+  - port: 443
+    protocol: TCP
+    targetPort: 443
+  selector:
+    apiserver: sample-apiserver
