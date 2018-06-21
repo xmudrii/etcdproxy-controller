@@ -75,13 +75,17 @@ build-darwin-amd64: ## Create the etcdproxy-controller executable for Darwin (os
 build-windows-amd64: ## Create the etcdproxy-controller executable for Windows 64-bit OS in the ./bin directory. Requires Docker.
 	GOOS=windows GOARCH=amd64${GOBUILD} -o bin/windows-amd64 &
 
-.PHONY: test
-test: ## Run tests.
+.PHONY: test-ci
+test-ci: ## Run tests.
 	go test -timeout 20m -v $(PKGS)
 
-.PHONY: verify-ci
-verify-ci: install-tools ## Run code checks
-	PKGS="${GOFILES}" GOFMT="gofmt" ./hack/verify-ci.sh
+.PHONY: test-e2e
+test-e2e: ## Run E2E tests. Requires working Kubernetes cluster and a Kubeconfig file.
+	echo "TBD :)"
+
+.PHONY: verify-gofmt
+verify-gofmt: install-tools ## Run code checks
+	PKGS="${GOFILES}" GOFMT="gofmt" ./hack/verify-gofmt.sh
 
 .PHONY: install-tools
 install-tools:
