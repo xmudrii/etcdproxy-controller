@@ -3,6 +3,7 @@ ifndef VERBOSE
 endif
 
 PKGS=$(shell go list ./... | grep -v /vendor)
+CI_PKGS=$(shell go list ./... | grep -v /vendor | grep -v /test)
 SHELL_IMAGE=golang:1.10
 PWD=$(shell pwd)
 GOFILES=$(shell find . -type f -name '*.go' -not -path "./vendor/*")
@@ -77,11 +78,11 @@ build-windows-amd64: ## Create the etcdproxy-controller executable for Windows 6
 
 .PHONY: test-ci
 test-ci: ## Run tests.
-	go test -timeout 20m -v $(PKGS)
+	go test -timeout 20m -v $(CI_PKGS)
 
 .PHONY: test-e2e
-test-e2e: ## Run E2E tests. Requires working Kubernetes cluster and a Kubeconfig file.
-	echo "TBD :)"
+test-e2e: ## Run E2E tests. E2E tests may be destructive. Requires working Kubernetes cluster and a Kubeconfig file.
+	./hack/run-e2e.sh
 
 .PHONY: verify-gofmt
 verify-gofmt: install-tools ## Run code checks
