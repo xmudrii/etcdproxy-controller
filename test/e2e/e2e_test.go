@@ -13,38 +13,16 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// newKubeClient creates new Kubernetes client instance based on kubeconfig file.
-func newKubeClient() (*kubernetes.Clientset, error) {
-	config, err := clientcmd.BuildConfigFromFlags("", os.Getenv("KUBECONFIG"))
-	if err != nil {
-		return nil, err
-	}
-
-	return kubernetes.NewForConfig(config)
-}
-
-// newEtcdProxyClient creates new client for etcdstorage resources.
-func newEtcdProxyClient() (*clientset.Clientset, error) {
-	config, err := clientcmd.BuildConfigFromFlags("", os.Getenv("KUBECONFIG"))
-	if err != nil {
-		return nil, err
-	}
-
-	return clientset.NewForConfig(config)
-}
-
 // TestDeployEtcdStorage deploys EtcdStorage resource and then tests are all relevant resources created and running.
 func TestDeployEtcdStorage(t *testing.T) {
 	// Initialize clients.
-	client, err := newKubeClient()
+	cfg, err := clientcmd.BuildConfigFromFlags("", os.Getenv("KUBECONFIG"))
 	if err != nil {
-		t.Fatalf("unable to create kubernetes client from provided kubeconfig: %v", err)
+		t.Fatalf("unable to create kubernetes config from provided kubeconfig file: %v", err)
 	}
 
-	etcdproxyClient, err := newEtcdProxyClient()
-	if err != nil {
-		t.Fatalf("unable to create etcdproxy client from provided kubeconfig: %v", err)
-	}
+	client := kubernetes.NewForConfigOrDie(cfg)
+	etcdproxyClient := clientset.NewForConfigOrDie(cfg)
 
 	tests := []struct {
 		name                   string
@@ -65,15 +43,6 @@ func TestDeployEtcdStorage(t *testing.T) {
 			expectedReplicas:       int32(1),
 			expectedServiceName:    "etcd-es-test-1",
 			etcdStorageValid:       true,
-		},
-		{
-			name: "test etcdstorage creation - name too long",
-			etcdStorage: &v1alpha1.EtcdStorage{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "es-test-1-this-name-is-too-long-limit-foo-bar-baz-foo-bar-baz-123",
-				},
-			},
-			etcdStorageValid: false,
 		},
 	}
 	for _, tc := range tests {
@@ -98,15 +67,27 @@ func TestDeployEtcdStorage(t *testing.T) {
 					return false, nil
 				})
 				if err != nil {
+					err = etcdproxyClient.EtcdV1alpha1().EtcdStorages().Delete(es.Name, &metav1.DeleteOptions{})
+					if err != nil {
+						t.Logf("etcdstorage cleanup failed: %v", err)
+					}
 					t.Fatalf("deployed condition for etcdstorage '%s' not set, and is expected: %v", tc.etcdStorage.Name, err)
 				}
 
 				// We currently have only one condition, so we're making sure that one is set.
 				for _, cond := range es.Status.Conditions {
 					if cond.Type != "Deployed" {
+						err = etcdproxyClient.EtcdV1alpha1().EtcdStorages().Delete(es.Name, &metav1.DeleteOptions{})
+						if err != nil {
+							t.Logf("etcdstorage cleanup failed: %v", err)
+						}
 						t.Fatalf("expected 'Deployed' condition, but got: %s", cond.Type)
 					}
 					if cond.Status != v1alpha1.ConditionTrue {
+						err = etcdproxyClient.EtcdV1alpha1().EtcdStorages().Delete(es.Name, &metav1.DeleteOptions{})
+						if err != nil {
+							t.Logf("etcdstorage cleanup failed: %v", err)
+						}
 						t.Fatalf("expected condition 'Deployed' true, but got: %v", cond.Status)
 					}
 				}
@@ -123,6 +104,10 @@ func TestDeployEtcdStorage(t *testing.T) {
 					return true, nil
 				})
 				if err != nil {
+					err = etcdproxyClient.EtcdV1alpha1().EtcdStorages().Delete(es.Name, &metav1.DeleteOptions{})
+					if err != nil {
+						t.Logf("etcdstorage cleanup failed: %v", err)
+					}
 					t.Fatalf("expected replicaset '%s', but got: %v", tc.expectedReplicaSetName, err)
 				}
 
@@ -130,6 +115,11 @@ func TestDeployEtcdStorage(t *testing.T) {
 				_, err = client.CoreV1().Services("kube-apiserver-storage").Get(tc.expectedServiceName, metav1.GetOptions{})
 				if err != nil {
 					t.Fatalf("expected service '%s', but got: %v", tc.expectedServiceName, err)
+				}
+
+				err = etcdproxyClient.EtcdV1alpha1().EtcdStorages().Delete(es.Name, &metav1.DeleteOptions{})
+				if err != nil {
+					t.Fatalf("etcdstorage cleanup failed: %v", err)
 				}
 			}
 		})

@@ -20,20 +20,20 @@ jobs:
     - stage: Tests
       script: make test-ci
 
-    - stage: E2E Tests
-      script: make test-e2e
-      before_script:
-        # Download kubectl, which is a requirement for using minikube and running e2e tests.
-        - curl -Lo kubectl https://storage.googleapis.com/kubernetes-release/release/${KUBERNETES_VERSION}/bin/linux/amd64/kubectl && chmod +x kubectl && sudo mv kubectl /usr/local/bin/
-        # Download minikube.
-        - curl -Lo minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64 && chmod +x minikube && sudo mv minikube /usr/local/bin/
-        # Start minikube.
-        - sudo minikube start --vm-driver=none --bootstrapper=localkube --kubernetes-version=${KUBERNETES_VERSION}
-        # Update the kubeconfig to use the minikube cluster.
-        - minikube update-context
-        # Wait for Kubernetes to be up and ready.
-        # TODO: Check for /healthz
-        - JSONPATH='{range .items[*]}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}'; until kubectl get nodes -o jsonpath="$JSONPATH" 2>&1 | grep -q "Ready=True"; do sleep 1; done
+#    - stage: E2E Tests
+#      script: make test-e2e
+#      before_script:
+#        # Download kubectl, which is a requirement for using minikube and running e2e tests.
+#        - curl -Lo kubectl https://storage.googleapis.com/kubernetes-release/release/${KUBERNETES_VERSION}/bin/linux/amd64/kubectl && chmod +x kubectl && sudo mv kubectl /usr/local/bin/
+#        # Download minikube.
+#        - curl -Lo minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64 && chmod +x minikube && sudo mv minikube /usr/local/bin/
+#        # Start minikube.
+#        - sudo minikube start --vm-driver=none --bootstrapper=localkube --kubernetes-version=${KUBERNETES_VERSION}
+#        # Update the kubeconfig to use the minikube cluster.
+#        - minikube update-context
+#        # Wait for Kubernetes to be up and ready.
+#        # TODO: Check for /healthz
+#        - JSONPATH='{range .items[*]}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}'; until kubectl get nodes -o jsonpath="$JSONPATH" 2>&1 | grep -q "Ready=True"; do sleep 1; done
 
 notifications:
   email: false
