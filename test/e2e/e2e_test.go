@@ -18,7 +18,7 @@ func TestDeployEtcdStorage(t *testing.T) {
 	// Initialize clients.
 	cfg, err := clientcmd.BuildConfigFromFlags("", os.Getenv("KUBECONFIG"))
 	if err != nil {
-		t.Fatalf("unable to create kubernetes config from provided kubeconfig file: %v", err)
+		t.Fatal(err)
 	}
 
 	client := kubernetes.NewForConfigOrDie(cfg)
@@ -50,7 +50,7 @@ func TestDeployEtcdStorage(t *testing.T) {
 			// Create an EtcdStorage instance.
 			es, err := etcdproxyClient.EtcdV1alpha1().EtcdStorages().Create(tc.etcdStorage)
 			if err != nil && tc.etcdStorageValid {
-				t.Fatalf("unable to create etcdstorage '%s': %v", tc.etcdStorage.Name, err)
+				t.Fatal(err)
 			}
 
 			// Only continue if etcdStorage is expected to be valid and there is no error.
@@ -71,7 +71,7 @@ func TestDeployEtcdStorage(t *testing.T) {
 					if err != nil {
 						t.Logf("etcdstorage cleanup failed: %v", err)
 					}
-					t.Fatalf("deployed condition for etcdstorage '%s' not set, and is expected: %v", tc.etcdStorage.Name, err)
+					t.Fatal(err)
 				}
 
 				// We currently have only one condition, so we're making sure that one is set.
@@ -108,18 +108,18 @@ func TestDeployEtcdStorage(t *testing.T) {
 					if err != nil {
 						t.Logf("etcdstorage cleanup failed: %v", err)
 					}
-					t.Fatalf("expected replicaset '%s', but got: %v", tc.expectedReplicaSetName, err)
+					t.Fatal(err)
 				}
 
 				// Check is Service created.
 				_, err = client.CoreV1().Services("kube-apiserver-storage").Get(tc.expectedServiceName, metav1.GetOptions{})
 				if err != nil {
-					t.Fatalf("expected service '%s', but got: %v", tc.expectedServiceName, err)
+					t.Fatal(err)
 				}
 
 				err = etcdproxyClient.EtcdV1alpha1().EtcdStorages().Delete(es.Name, &metav1.DeleteOptions{})
 				if err != nil {
-					t.Fatalf("etcdstorage cleanup failed: %v", err)
+					t.Fatal(err)
 				}
 			}
 		})
