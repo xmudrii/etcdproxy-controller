@@ -3,6 +3,7 @@ ifndef VERBOSE
 endif
 
 PKGS=$(shell go list ./... | grep -v /vendor)
+CI_PKGS=$(shell go list ./... | grep -v /vendor | grep -v /test)
 SHELL_IMAGE=golang:1.10
 PWD=$(shell pwd)
 GOFILES=$(shell find . -type f -name '*.go' -not -path "./vendor/*")
@@ -75,13 +76,17 @@ build-darwin-amd64: ## Create the etcdproxy-controller executable for Darwin (os
 build-windows-amd64: ## Create the etcdproxy-controller executable for Windows 64-bit OS in the ./bin directory. Requires Docker.
 	GOOS=windows GOARCH=amd64${GOBUILD} -o bin/windows-amd64 &
 
-.PHONY: test
-test: ## Run tests.
-	go test -timeout 20m -v $(PKGS)
+.PHONY: test-ci
+test-ci: ## Run tests.
+	go test -timeout 20m -v $(CI_PKGS)
 
-.PHONY: verify-ci
-verify-ci: install-tools ## Run code checks
-	PKGS="${GOFILES}" GOFMT="gofmt" ./hack/verify-ci.sh
+.PHONY: test-e2e
+test-e2e: ## Run E2E tests. E2E tests may be destructive. Requires working Kubernetes cluster and a Kubeconfig file.
+	./hack/run-e2e.sh
+
+.PHONY: verify-gofmt
+verify-gofmt: install-tools ## Run code checks
+	PKGS="${GOFILES}" GOFMT="gofmt" ./hack/verify-gofmt.sh
 
 .PHONY: install-tools
 install-tools:
