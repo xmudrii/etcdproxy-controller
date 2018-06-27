@@ -21,8 +21,8 @@ type EtcdProxyControllerConfig struct {
 
 // CoreEtcdConfig type is used to wire the core etcd information used by controller to create ReplicaSets.
 type CoreEtcdConfig struct {
-	// URL is the address of the core etcd.
-	URL string
+	// URLs contains the core etcd addresses.
+	URLs []string
 
 	// CAConfigMapName is the name of the ConfigMap in the controller namespace where CA certificates for
 	// the core etcd are stored.
