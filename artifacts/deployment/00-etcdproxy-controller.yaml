@@ -127,4 +127,4 @@ spec:
         command:
           - /etcdproxy-controller
           - "--etcd-core-url=https://etcd-svc-1.etcd.svc:2379"
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent

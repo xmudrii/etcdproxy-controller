@@ -15,6 +15,11 @@ echo -e 'kubernetes version:\t' $(kubectl version -o json | jq .serverVersion.gi
 echo -e 'etcdproxy version:\t' $(git rev-parse --verify HEAD)
 echo ''
 
+# Tag xmudrii/etcdproxy-controller:latest Docker image.
+echo '- Tagging etcdproxy-controller Docker image.'
+docker build -t xmudrii/etcdproxy-controller:latest .
+echo ''
+
 # Deploying prerequisites
 echo '- Deploying the core etcd'
 kubectl create -f ${SCRIPT_ROOT}/artifacts/etcd/etcd.yaml
@@ -51,6 +56,10 @@ APISERVICE_STATUS=$(kubectl get apiservice v1alpha1.wardle.k8s.io -o jsonpath="{
 while [ "$APISERVICE_STATUS" != "True" ]
 do
     APISERVICE_STATUS=$(kubectl get apiservice v1alpha1.wardle.k8s.io -o jsonpath="{.status.conditions[0].status}")
+done
+until kubectl get --raw /apis/wardle.k8s.io/v1alpha1
+do
+    sleep 0.5
 done
 
 echo '* Creating a sample Flunder resource.'
