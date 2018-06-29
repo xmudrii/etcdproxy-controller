@@ -283,7 +283,7 @@ func (c *EtcdProxyController) syncHandler(key string) error {
 	// Otherwise, the controller ends up in the ReplicaSet recreation loop until GC doesn't
 	// delete the EtcdStorage resource.
 	if !etcdstorage.DeletionTimestamp.IsZero() {
-		c.recorder.Event(etcdstorage, corev1.EventTypeNormal, Terminating, MessageResourceTerminating)
+		glog.V(2).Infof("EtcdStorage %s is being terminated.", etcdstorage.Name)
 		return nil
 	}
 
