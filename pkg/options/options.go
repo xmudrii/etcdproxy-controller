@@ -46,7 +46,7 @@ func NewEtcdProxyControllerOptions() *EtcdProxyControllerOptions {
 		CoreEtcd:            NewCoreEtcdOptions(),
 		ControllerNamespace: "kube-apiserver-storage",
 		KubeconfigPath:      "",
-		ProxyImage:          "quay.io/coreos/etcd:v3.2.18",
+		ProxyImage:          "quay.io/coreos/etcd:v3.3.8",
 	}
 }
 
