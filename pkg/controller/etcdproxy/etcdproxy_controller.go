@@ -7,6 +7,7 @@ import (
 	"github.com/golang/glog"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/runtime"
@@ -32,13 +33,16 @@ import (
 const httpUserAgentName = "etcdproxy-controller"
 
 const (
-	// SuccessSynced is used as part of the Event 'reason' when a EtcdStorage is synced
+	// SuccessSynced is used as part of the Event 'reason' when an EtcdStorage is synced.
 	SuccessSynced = "Synced"
+	// Terminating is used as part of the Event 'reason' when an EtcdStorage resource is being deleted (deletion
+	// timestamp is set).
+	Terminating = "Terminating"
 	// ResourceReclaimed is used as part of the Event 'reason' when a replicaset or service already exists
 	// and EtcdStorage reclaims it.
 	ResourceReclaimed = "ResourceReclaimed"
 
-	// ErrResourceReclaimed is used as port of the Event 'reason' when reclaiming a resource fails.
+	// ErrResourceReclaimed is used as part of the Event 'reason' when reclaiming a resource fails.
 	ErrResourceReclaimed = "ErrResourceReclaimed"
 	// ErrUnknown is used as part of the Event 'reason' when a EtcdStorage fails
 	// to get, create, or update resource.
@@ -47,6 +51,8 @@ const (
 	// ResourceReclaimedReason is the message used for Events when a resource
 	// fails to sync due to a ReplicaSet already existing
 	ResourceReclaimedReason = "Resource %q already exists and is set to be managed by EtcdStorage"
+	// ResourceTerminatingReason is the message used for Events when a EtcdStorage is terminating.
+	MessageResourceTerminating = "EtcdStorage is being terminated"
 	// MessageResourceSynced is the message used for an Event fired when a EtcdStorage
 	// is synced successfully
 	MessageResourceSynced = "EtcdStorage synced successfully"
@@ -273,6 +279,14 @@ func (c *EtcdProxyController) syncHandler(key string) error {
 		return err
 	}
 
+	// This prevents syncHandler to continue in case an EtcdStorage resource is being deleted.
+	// Otherwise, the controller ends up in the ReplicaSet recreation loop until GC doesn't
+	// delete the EtcdStorage resource.
+	if !etcdstorage.DeletionTimestamp.IsZero() {
+		glog.V(2).Infof("EtcdStorage %s is being terminated.", etcdstorage.Name)
+		return nil
+	}
+
 	replicaset, err := c.replicasetsLister.ReplicaSets(c.config.ControllerNamespace).Get(replicaSetName(etcdstorage))
 	if errors.IsNotFound(err) {
 		replicaset, err = c.kubeclientset.AppsV1().ReplicaSets(c.config.ControllerNamespace).Create(newReplicaSet(
@@ -358,6 +372,13 @@ func (c *EtcdProxyController) updateEtcdStorageStatus(etcdstorage *etcdstoragev1
 	condition etcdstoragev1alpha1.EtcdStorageCondition) (*etcdstoragev1alpha1.EtcdStorage, error) {
 	etcdstorageCopy := etcdstorage.DeepCopy()
 	etcdstoragev1alpha1.SetEtcdStorageCondition(etcdstorageCopy, condition)
+
+	// We're not updating the EtcdStorage resource if there are no Status changes between new and old objects
+	// in order to prevent Update loops.
+	if equality.Semantic.DeepEqual(etcdstorageCopy.Status, etcdstorage.Status) {
+		return etcdstorage, nil
+	}
+
 	etcdstorageCopy, err := c.etcdProxyClient.EtcdV1alpha1().EtcdStorages().UpdateStatus(etcdstorageCopy)
 	return etcdstorageCopy, err
 }
