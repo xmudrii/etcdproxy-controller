@@ -34,31 +34,14 @@ import (
 const httpUserAgentName = "etcdproxy-controller"
 
 const (
-	// SuccessSynced is used as part of the Event 'reason' when an EtcdStorage is synced.
-	SuccessSynced = "Synced"
-	// Terminating is used as part of the Event 'reason' when an EtcdStorage resource is being deleted (deletion
-	// timestamp is set).
-	Terminating = "Terminating"
-	// ResourceReclaimed is used as part of the Event 'reason' when a Deployment or a Service already exists
-	// and EtcdStorage reclaims it.
-	ResourceReclaimed = "ResourceReclaimed"
+	// EtcdStorageDeployed is used as part of the Event reason when an EtcdStorage resource is successfully synced.
+	EtcdStorageDeployed = "EtcdStorageDeployed"
 
-	// ErrResourceReclaimed is used as part of the Event 'reason' when reclaiming a resource fails.
-	ErrResourceReclaimed = "ErrResourceReclaimed"
-	// ErrUnknown is used as part of the Event 'reason' when a EtcdStorage fails
-	// to get, create, or update resource.
-	ErrUnknown = "ErrUnknown"
+	// EtcdStorageDeployFailure is used as part of the Event reason when an EtcdStorage resource is not synced successfully.
+	EtcdStorageDeployFailure = "EtcdStorageDeployFailure"
 
-	// ResourceReclaimedReason is the message used for Events when a resource
-	// fails to sync due to a Deployment already existing
-	ResourceReclaimedReason = "Resource %q already exists and is set to be managed by EtcdStorage"
-	// ResourceTerminatingReason is the message used for Events when a EtcdStorage is terminating.
-	MessageResourceTerminating = "EtcdStorage is being terminated"
-	// MessageResourceSynced is the message used for an Event fired when a EtcdStorage
-	// is synced successfully
-	MessageResourceSynced = "EtcdStorage synced successfully"
-	// MessageErrResourceReclaimed is the message used for an Event fired when a ErrResourceReclaimed occurs.
-	MessageErrResourceReclaimed = "Unable to put EtcdStorage OwnerReference to resource %q"
+	// CertificatesDeployFailure is used as part of the Event reason when a Certificates are not generated or deployed successfully.
+	CertificatesDeployFailure = "CertificatesDeployFailure"
 )
 
 // EtcdProxyController is the controller implementation for EtcdStorage resources
@@ -288,16 +271,19 @@ func (c *EtcdProxyController) syncHandler(key string) error {
 		return nil
 	}
 
-	// Deploy Server Etcd Proxy certificates.
+	etcdstorageCondition := etcdstoragev1alpha1.EtcdStorageCondition{
+		Type:   etcdstoragev1alpha1.Deployed,
+		Status: etcdstoragev1alpha1.ConditionUnknown,
+	}
+
 	var errs []error
+	var certErrs []error
+	// Deploy Server Etcd Proxy certificates.
 	if err = c.ensureClientCertificates(etcdstorage); err != nil {
-		errs = append(errs, err)
+		certErrs = append(certErrs, err)
 	}
 	if err = c.ensureServerCertificates(etcdstorage); err != nil {
-		errs = append(errs, err)
-	}
-	if len(errs) > 0 {
-		return utilerrors.NewAggregate(errs)
+		certErrs = append(certErrs, err)
 	}
 
 	// Etcd proxy Deployment.
@@ -313,24 +299,22 @@ func (c *EtcdProxyController) syncHandler(key string) error {
 	// attempt processing again later. This could have been caused by a
 	// temporary network failure, or any other transient reason.
 	if err != nil {
-		c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrUnknown, err.Error())
-		return err
+		etcdstorageCondition.Status = etcdstoragev1alpha1.ConditionFalse
+		etcdstorageCondition.Reason = "FailedDeploying"
+		etcdstorageCondition.Message = err.Error()
+		errs = append(errs, err)
 	}
 
-	// If the Deployment is not controlled by this EtcdStorage resource, we should log
-	// a warning to the event recorder and ret
+	// If the ReplicaSet is not controlled by this EtcdStorage resource, we should try to update Owner reference.
 	if !metav1.IsControlledBy(deployment, etcdstorage) {
 		deployment.SetOwnerReferences([]metav1.OwnerReference{
 			*metav1.NewControllerRef(etcdstorage, etcdstoragev1alpha1.SchemeGroupVersion.WithKind("EtcdStorage")),
 		})
+
 		deployment, err = c.kubeclientset.AppsV1().Deployments(c.config.ControllerNamespace).Update(deployment)
 		if err != nil {
-			msg := fmt.Sprintf(MessageErrResourceReclaimed, deployment.Name)
-			c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrResourceReclaimed, msg)
-			return err
+			glog.V(2).Infof("Unable to update OwnerRef for ReplicaSet %s: %v", deployment.Name, err)
 		}
-		msg := fmt.Sprintf(ResourceReclaimedReason, deployment.Name)
-		c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ResourceReclaimed, msg)
 	}
 
 	// Create Service to expose the etcdproxy pod.
@@ -345,8 +329,10 @@ func (c *EtcdProxyController) syncHandler(key string) error {
 	// attempt processing again later. This could have been caused by a
 	// temporary network failure, or any other transient reason.
 	if err != nil {
-		c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrUnknown, err.Error())
-		return err
+		etcdstorageCondition.Status = etcdstoragev1alpha1.ConditionFalse
+		etcdstorageCondition.Reason = "FailedDeploying"
+		etcdstorageCondition.Message = err.Error()
+		errs = append(errs, err)
 	}
 
 	// If the Service is not controlled by this EtcdStorage resource, we should log
@@ -355,32 +341,41 @@ func (c *EtcdProxyController) syncHandler(key string) error {
 		service.SetOwnerReferences([]metav1.OwnerReference{
 			*metav1.NewControllerRef(etcdstorage, etcdstoragev1alpha1.SchemeGroupVersion.WithKind("EtcdStorage")),
 		})
+
 		service, err = c.kubeclientset.CoreV1().Services(c.config.ControllerNamespace).Update(service)
 		if err != nil {
-			msg := fmt.Sprintf(MessageErrResourceReclaimed, service.Name)
-			c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrResourceReclaimed, msg)
-			return err
+			glog.V(2).Infof("Unable to update OwnerRef for Secret %s: %v", service.Name, err)
 		}
-		msg := fmt.Sprintf(ResourceReclaimedReason, service.Name)
-		c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ResourceReclaimed, msg)
 	}
 
 	// Finally, we update the status block of the EtcdStorage resource to reflect the
 	// current state of the world
-	deployedCondition := etcdstoragev1alpha1.EtcdStorageCondition{
-		Type:    etcdstoragev1alpha1.Deployed,
-		Status:  etcdstoragev1alpha1.ConditionTrue,
-		Reason:  "EtcdProxyDeployed",
-		Message: "etcdproxy deployment and service created",
-	}
-	_, err = c.updateEtcdStorageStatus(etcdstorage, deployedCondition)
-	if err != nil {
-		c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrUnknown, err.Error())
-		return err
+	if etcdstorageCondition.Status == etcdstoragev1alpha1.ConditionUnknown {
+		etcdstorageCondition = etcdstoragev1alpha1.EtcdStorageCondition{
+			Type:    etcdstoragev1alpha1.Deployed,
+			Status:  etcdstoragev1alpha1.ConditionTrue,
+			Reason:  "Deployed",
+			Message: "etcdproxy replicaset and service created",
+		}
 	}
 
-	c.recorder.Event(etcdstorage, corev1.EventTypeNormal, SuccessSynced, MessageResourceSynced)
-	return nil
+	_, err = c.updateEtcdStorageStatus(etcdstorage, etcdstorageCondition)
+	if err != nil {
+		errs = append(errs, err)
+	}
+
+	if len(errs) != 0 {
+		c.recorder.Event(etcdstorage, corev1.EventTypeNormal,
+			EtcdStorageDeployed, fmt.Sprintf("EtcdStorage %s synced successfully", etcdstorage.Name))
+	}
+	if len(certErrs) != 0 {
+		errs = append(errs, certErrs...)
+		c.recorder.Event(etcdstorage, corev1.EventTypeWarning,
+			CertificatesDeployFailure, fmt.Sprintf("Unable to deploy EtcdProxy Certificates for EtcdStorage %s: %v",
+				etcdstorage.Name, utilerrors.NewAggregate(errs)))
+	}
+
+	return utilerrors.NewAggregate(errs)
 }
 
 func (c *EtcdProxyController) updateEtcdStorageStatus(etcdstorage *etcdstoragev1alpha1.EtcdStorage,
