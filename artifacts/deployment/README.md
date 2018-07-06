@@ -21,7 +21,7 @@ This directory contains manifest for deploying the `EtcdProxy` Controller in the
 The deployment manifest assumes you have the core `etcd` deployed and exposed on `https://etcd-svc-1.etcd.svc:2379`.
 The URL can be changed by modifying the `--etcd-core-url` flag in the `00-etcdproxy-controller.yaml` file.
 
-There is an example `etcd` deploymend manifest located in the [`artifacts/etcd`](https://github.com/xmudrii/etcdproxy-controller/tree/master/artifacts/etcd) directory.
+There is an example `etcd` deploymend manifest located in the [`artifacts/etcd`](../etcd) directory.
 
 ## Deploying certificates
 
