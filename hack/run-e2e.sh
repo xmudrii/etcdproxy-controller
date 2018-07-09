@@ -25,13 +25,16 @@ echo '- Deploying the core etcd'
 kubectl create -f ${SCRIPT_ROOT}/artifacts/etcd/etcd.yaml
 echo ''
 
-# Test deploying controller and creating the EtcdStorage object.
-echo '- Testing EtcdStorage deployment:'
-
-echo '* Deploying the EtcdProxy Controller.'
+echo '- Deploying the EtcdProxy Controller.'
 kubectl create -f ${SCRIPT_ROOT}/artifacts/deployment/00-etcdproxy-controller.yaml
 kubectl create -f ${SCRIPT_ROOT}/artifacts/etcd/etcd-client-certs.yaml
 
+echo '- Deploying the sample-apiserver prerequisites.'
+kubectl create -f ${SCRIPT_ROOT}/artifacts/deployment/01-sample-apiserver-prerequisites.yaml
+kubectl create -f ${SCRIPT_ROOT}/artifacts/deployment/02-sample-apiserver-certs.yaml
+
+# Test deploying controller and creating the EtcdStorage object.
+echo '- Testing EtcdStorage deployment:'
 # Run Go tests.
 echo '* Deploying EtcdStorage object and verifying deployed resources.'
 GOCACHE=off go test -v ${SCRIPT_ROOT}/test/e2e/...
@@ -40,10 +43,7 @@ echo -e '- EtcdStorage tests completed successfully!\n'
 
 # Test deploying the sample-apiserver.
 echo '- Testing sample-apiserver deployment:'
-
-echo '* Deploying sample-apiserver resources.'
-kubectl create -f ${SCRIPT_ROOT}/artifacts/deployment/01-sample-apiserver-prerequisites.yaml
-kubectl create -f ${SCRIPT_ROOT}/artifacts/deployment/02-sample-apiserver-certs.yaml
+echo '* Deploying sample-apiserver.'
 kubectl create -f ${SCRIPT_ROOT}/artifacts/deployment/03-sample-apiserver-deployment.yaml
 
 echo '* Waiting for API server to become ready'
