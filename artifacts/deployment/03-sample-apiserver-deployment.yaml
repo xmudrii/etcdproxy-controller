@@ -7,7 +7,14 @@
 apiVersion: etcd.xmudrii.com/v1alpha1
 kind: EtcdStorage
 metadata:
-  name: k8s-sample-apiserver
+  name: sample-apiserver
+spec:
+  caCertConfigMap:
+  - name: etcd-serving-ca
+    namespace: k8s-sample-apiserver
+  clientCertSecret:
+  - name: etcd-client-cert
+    namespace: k8s-sample-apiserver
 ---
 # Deploys the sample-apiserver (https://github.com/kubernetes/sample-apiserver).
 # The Deployment uses the xmudrii/kube-sample-apiserver image.
@@ -31,7 +38,7 @@ spec:
       - name: sample-apiserver
         image: xmudrii/kube-sample-apiserver
         imagePullPolicy: Always
-        command: ["/kube-sample-apiserver", "--etcd-servers=http://etcd-k8s-sample-apiserver.kube-apiserver-storage.svc:2379"]
+        command: ["/kube-sample-apiserver", "--etcd-servers=https://etcd-sample-apiserver.kube-apiserver-storage.svc:2379", "--etcd-cafile=/etc/etcd-certs/ca/ca.pem", "--etcd-certfile=/etc/etcd-certs/client/client.pem", "--etcd-keyfile=/etc/etcd-certs/client/client-key.pem"]
         volumeMounts:
         - mountPath: /etc/etcd-certs/ca
           name: etcd-serving-ca

@@ -25,6 +25,18 @@ const (
 	Deployed EtcdStorageConditionType = "Deployed"
 )
 
+// CABundleDestination contains name and namespace of configmap where CA bundle is stored.
+type CABundleDestination struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+}
+
+// ClientCertificateDestination contains name and namespace of secret where client certificate and key are stored.
+type ClientCertificateDestination struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+}
+
 // +genclient
 // +genclient:nonNamespaced
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -40,6 +52,13 @@ type EtcdStorage struct {
 
 // EtdcStorageSpec is the spec for a EtcdStorage resource
 type EtdcStorageSpec struct {
+	// CACertConfigMaps contains name and namespace of ConfigMap where CA serving certificate for etcdproxy pod
+	// is supposed to be deployed. Usually it is in aggregated API server namespace.
+	CACertConfigMaps []CABundleDestination `json:"caCertConfigMap"`
+
+	// ClientCertSecrets contains name and namespace of Secret where client certificate and key for etcdproxy pod
+	// is supposed to be deployed. Usually it is in aggregated API server namespace.
+	ClientCertSecrets []ClientCertificateDestination `json:"clientCertSecret"`
 }
 
 // EtcdStorageStatus is the status for a EtcdStorage resource

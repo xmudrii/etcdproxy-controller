@@ -101,6 +101,32 @@ spec:
             name:
               type: string
               maxLength: 59 # because of service name, explained above.
+        spec:
+          properties:
+            caCertConfigMap:
+              type: array
+              items:
+                type: object
+                required: ["name", "namespace"]
+                properties:
+                  name:
+                    type: string
+                    pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$'
+                  namespace:
+                    type: string
+                    pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+            clientCertSecret:
+              type: array
+              items:
+                type: object
+                required: ["name", "namespace"]
+                properties:
+                  name:
+                    type: string
+                    pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$'
+                  namespace:
+                    type: string
+                    pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
 ---
 # Controller deployment.
 apiVersion: apps/v1

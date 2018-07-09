@@ -9,26 +9,50 @@ import (
 )
 
 func TestGetReplicaSetName(t *testing.T) {
-	es := v1alpha1.EtcdStorage{
+	es := &v1alpha1.EtcdStorage{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-1"},
 	}
 
-	name := replicaSetName(&es)
+	name := replicaSetName(es)
 	expectedName := "etcd-rs-test-1"
 	if name != expectedName {
-		t.Fatalf("incorrect replicaset name. expected: %s, got: %s", name, expectedName)
+		t.Fatalf("incorrect replicaset name. expected: %s, got: %s", expectedName, name)
 	}
 }
 
 func TestGetServiceName(t *testing.T) {
-	es := v1alpha1.EtcdStorage{
+	es := &v1alpha1.EtcdStorage{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-1"},
 	}
 
-	name := serviceName(&es)
+	name := serviceName(es)
 	expectedName := "etcd-test-1"
 	if name != expectedName {
-		t.Fatalf("incorrect replicaset name. expected: %s, got: %s", name, expectedName)
+		t.Fatalf("incorrect replicaset name. expected: %s, got: %s", expectedName, name)
+	}
+}
+
+func TestEtcdProxyCAConfigMapName(t *testing.T) {
+	es := &v1alpha1.EtcdStorage{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-1"},
+	}
+
+	name := etcdProxyCAConfigMapName(es)
+	expectedName := "test-1-ca-cert"
+	if name != expectedName {
+		t.Fatalf("incorrect etcdproxy CA ConfigMap name. expected %s, got %s", expectedName, name)
+	}
+}
+
+func TestEtcdProxyServerCertsSecret(t *testing.T) {
+	es := &v1alpha1.EtcdStorage{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-1"},
+	}
+
+	name := etcdProxyServerCertsSecret(es)
+	expectedName := "test-1-server-cert"
+	if name != expectedName {
+		t.Fatalf("incorrect etcdproxy CA ConfigMap name. expected %s, got %s", expectedName, name)
 	}
 }
 
