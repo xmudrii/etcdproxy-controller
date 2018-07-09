@@ -50,9 +50,12 @@ func newReplicaSet(etcdstorage *etcdstoragev1alpha1.EtcdStorage,
 								flagfromString("endpoints", strings.Join(etcdCoreURLs, ",")),
 								flagfromString("namespace", "/"+etcdProxyNamespace+"/"),
 								"--listen-addr=0.0.0.0:2379",
-								"--cacert=/etc/certs/ca/ca.pem",
-								"--cert=/etc/certs/client/client.pem",
-								"--key=/etc/certs/client/client-key.pem",
+								"--cacert=/etc/coreetcd-certs/ca/ca.pem",
+								"--cert=/etc/coreetcd-certs/client/client.pem",
+								"--key=/etc/coreetcd-certs/client/client-key.pem",
+								"--trusted-ca-file=/etc/etcdproxy-certs/ca/ca.pem",
+								"--cert-file=/etc/etcdproxy-certs/server/server.pem",
+								"--key-file=/etc/etcdproxy-certs/server/server-key.pem",
 							},
 							Ports: []corev1.ContainerPort{
 								{
@@ -64,12 +67,22 @@ func newReplicaSet(etcdstorage *etcdstoragev1alpha1.EtcdStorage,
 							VolumeMounts: []corev1.VolumeMount{
 								{
 									Name:      etcdCoreCertSecretName,
-									MountPath: "/etc/certs/client",
+									MountPath: "/etc/coreetcd-certs/client",
 									ReadOnly:  true,
 								},
 								{
 									Name:      etcdCoreCAConfigMapName,
-									MountPath: "/etc/certs/ca",
+									MountPath: "/etc/coreetcd-certs/ca",
+									ReadOnly:  true,
+								},
+								{
+									Name:      etcdProxyCAConfigMapName(etcdstorage),
+									MountPath: "/etc/etcdproxy-certs/ca",
+									ReadOnly:  true,
+								},
+								{
+									Name:      etcdProxyServerCertsSecret(etcdstorage),
+									MountPath: "/etc/etcdproxy-certs/server",
 									ReadOnly:  true,
 								},
 							},
@@ -91,6 +104,24 @@ func newReplicaSet(etcdstorage *etcdstoragev1alpha1.EtcdStorage,
 									LocalObjectReference: corev1.LocalObjectReference{
 										Name: etcdCoreCAConfigMapName,
 									},
+								},
+							},
+						},
+						{
+							Name: etcdProxyCAConfigMapName(etcdstorage),
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: etcdProxyCAConfigMapName(etcdstorage),
+									},
+								},
+							},
+						},
+						{
+							Name: etcdProxyServerCertsSecret(etcdstorage),
+							VolumeSource: corev1.VolumeSource{
+								Secret: &corev1.SecretVolumeSource{
+									SecretName: etcdProxyServerCertsSecret(etcdstorage),
 								},
 							},
 						},
@@ -127,6 +158,37 @@ func newService(etcdstorage *etcdstoragev1alpha1.EtcdStorage, etcdControllerName
 	}
 }
 
+// newConfigMap creates a ConfigMap in a namespace specified as an argument, with OwnerRef set to the EtcdStorage object.
+func newConfigMap(etcdstorage *etcdstoragev1alpha1.EtcdStorage, configMapName,
+	configMapNamespace string, data map[string]string) *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      configMapName,
+			Namespace: configMapNamespace,
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(etcdstorage, etcdstoragev1alpha1.SchemeGroupVersion.WithKind("EtcdStorage")),
+			},
+		},
+		Data: data,
+	}
+}
+
+// newSecret creates a Secret in a namespace specified as an argument, with OwnerRef set to the EtcdStorage object.
+func newSecret(etcdstorage *etcdstoragev1alpha1.EtcdStorage, secretName,
+	secretNamespace string, data map[string]string) *corev1.Secret {
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretName,
+			Namespace: secretNamespace,
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(etcdstorage, etcdstoragev1alpha1.SchemeGroupVersion.WithKind("EtcdStorage")),
+			},
+		},
+		Type:       "Opaque",
+		StringData: data,
+	}
+}
+
 // replicaSetName calculates name to be used to create a ReplicaSet.
 func replicaSetName(etcdstorage *etcdstoragev1alpha1.EtcdStorage) string {
 	return fmt.Sprintf("etcd-rs-%s", etcdstorage.ObjectMeta.Name)
@@ -135,6 +197,16 @@ func replicaSetName(etcdstorage *etcdstoragev1alpha1.EtcdStorage) string {
 // serviceName calculates name to be used to create a ReplicaSet.
 func serviceName(etcdstorage *etcdstoragev1alpha1.EtcdStorage) string {
 	return fmt.Sprintf("etcd-%s", etcdstorage.ObjectMeta.Name)
+}
+
+// etcdProxyCAConfigMapName calculates name to be used to create a etcdproxy CA ConfigMap.
+func etcdProxyCAConfigMapName(etcdstorage *etcdstoragev1alpha1.EtcdStorage) string {
+	return fmt.Sprintf("%s-ca-cert", etcdstorage.Name)
+}
+
+// etcdProxyServerCertsSecret calculates name to be used to create a etcdproxy server certs Secret.
+func etcdProxyServerCertsSecret(etcdstorage *etcdstoragev1alpha1.EtcdStorage) string {
+	return fmt.Sprintf("%s-server-cert", etcdstorage.Name)
 }
 
 // flagfromString returns double dash prefixed flag calculated from provided key and value.
