@@ -19,3 +19,25 @@ spec:
             name:
               type: string
               maxLength: 59 # because of service name, explained above.
+        spec:
+          properties:
+            caCertConfigMap:
+              type: array
+              items:
+                type: object
+                required: ["name", "namespace"]
+                properties:
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+            clientCertSecret:
+              type: array
+              items:
+                type: object
+                required: ["name", "namespace"]
+                properties:
+                  name:
+                    type: string
+                  namespace:
+                    type: string
