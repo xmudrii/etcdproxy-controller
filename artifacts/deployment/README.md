@@ -1,6 +1,6 @@
 # Deploying `EtcdProxy` Controller
 
-This directory contains manifest for deploying the `EtcdProxy` Controller in the cluster. The manifest deploys the following resources:
+This directory contains the `00-etcdproxy-controller.yaml` manifest, used for deploying the `EtcdProxy` Controller in the cluster. The manifest deploys the following resources:
 
 * **namespace/kube-apiserver-storage** - namespace for the EtcdProxyController to lives in,
 
@@ -15,6 +15,14 @@ This directory contains manifest for deploying the `EtcdProxy` Controller in the
 
 * **customresourcedefinition/etcdstorages.etcd.xmudrii.com** - CRD defining the EtcdStorage type for managing etcd proxies,
 * **deployment/etcdproxy-controller-deployment** - Controller Deployment.
+
+Before deploying the EtcdProxy controller on GKE, it's required to grant your user the ability to create and manage RBAC roles in the cluster,
+which can be done by executing the following command:
+```
+kubectl create clusterrolebinding cluster-admin-binding \
+--clusterrole cluster-admin --user <your-email-address>
+```
+More about the Role-Based Access Control in GKE can be found in [Google Cloud documentation](https://cloud.google.com/kubernetes-engine/docs/how-to/role-based-access-control).
 
 ## Deploying the core `etcd`
 

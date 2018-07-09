@@ -14,7 +14,7 @@ HEAD of this repo matches versions `1.10` of `k8s.io/apiserver`, `k8s.io/apimach
 
 ## Running controller
 
-There're two ways to run `EtcdProxyController`:
+There are two ways to run `EtcdProxyController`:
 
 * in-cluster, which is done by deploying [the deployment manifest, located in the `artifacts/deployment` directory](artifacts/deployment/00-etcdproxy-controller.yaml),
 * out-of-cluster, which is done by building the controller binary and running it on the local machine.
