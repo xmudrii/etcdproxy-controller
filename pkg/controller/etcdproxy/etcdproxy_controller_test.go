@@ -37,7 +37,7 @@ func TestSyncHandler(t *testing.T) {
 			startingEtcdStorage: etcdStorage("test-1"),
 			etcdProxyConfig: &EtcdProxyControllerConfig{
 				CoreEtcd: &CoreEtcdConfig{
-					URL:             "https://test.etcd.svc:2379",
+					URLs:            []string{"https://test.etcd.svc:2379"},
 					CAConfigMapName: "etcd-coreserving-ca",
 					CertSecretName:  "etcd-coreserving-cert",
 				},
@@ -52,7 +52,7 @@ func TestSyncHandler(t *testing.T) {
 			startingEtcdStorage: etcdStorage("test-2"),
 			etcdProxyConfig: &EtcdProxyControllerConfig{
 				CoreEtcd: &CoreEtcdConfig{
-					URL:             "https://test.etcd.svc:2379",
+					URLs:            []string{"https://test.etcd.svc:2379"},
 					CAConfigMapName: "etcd-coreserving-ca",
 					CertSecretName:  "etcd-coreserving-cert",
 				},

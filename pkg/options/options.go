@@ -11,9 +11,16 @@ import (
 
 // CoreEtcdOptions type is used to wire the core etcd information used by controller to create ReplicaSets.
 type CoreEtcdOptions struct {
-	URL             string
+	// URLs contains the core etcd addresses.
+	URLs []string
+
+	// CAConfigMapName is the name of the ConfigMap in the controller namespace where CA certificates for
+	// the core etcd are stored.
 	CAConfigMapName string
-	CertSecretName  string
+
+	// CertSecretName is the name of the Secret in the controller namespace where Client certificate and key for
+	// the core etcd are stored.
+	CertSecretName string
 }
 
 // EtcdProxyControllerOptions type is used to pass information from cli to the controller.
@@ -34,7 +41,7 @@ type EtcdProxyControllerOptions struct {
 // NewCoreEtcdOptions returns CoreEtcdOptions struct filled with default values.
 func NewCoreEtcdOptions() *CoreEtcdOptions {
 	return &CoreEtcdOptions{
-		URL:             "",
+		URLs:            []string{},
 		CAConfigMapName: "etcd-coreserving-ca",
 		CertSecretName:  "etcd-coreserving-cert",
 	}
@@ -52,7 +59,7 @@ func NewEtcdProxyControllerOptions() *EtcdProxyControllerOptions {
 
 // AddFlags adds flags to the root command.
 func (e *EtcdProxyControllerOptions) AddFlags(fs *pflag.FlagSet) {
-	fs.StringVarP(&e.CoreEtcd.URL, "etcd-core-url", "u", e.CoreEtcd.URL, "The address of the core etcd server.")
+	fs.StringSliceVarP(&e.CoreEtcd.URLs, "etcd-core-url", "u", e.CoreEtcd.URLs, "The address of the core etcd server.")
 	fs.StringVar(&e.CoreEtcd.CAConfigMapName, "etcd-core-ca-configmap", e.CoreEtcd.CAConfigMapName, "The name of the ConfigMap where CA is stored.")
 	fs.StringVar(&e.CoreEtcd.CertSecretName, "etcd-core-certs-secret", e.CoreEtcd.CertSecretName, "The name of the Secret where client certificates are stored.")
 
@@ -66,7 +73,7 @@ func (e *EtcdProxyControllerOptions) ApplyTo(c *etcdproxy.EtcdProxyControllerCon
 	var err error
 
 	c.CoreEtcd = &etcdproxy.CoreEtcdConfig{}
-	c.CoreEtcd.URL = e.CoreEtcd.URL
+	c.CoreEtcd.URLs = append([]string{}, e.CoreEtcd.URLs...)
 	c.CoreEtcd.CAConfigMapName = e.CoreEtcd.CAConfigMapName
 	c.CoreEtcd.CertSecretName = e.CoreEtcd.CertSecretName
 
@@ -102,7 +109,7 @@ func (e *EtcdProxyControllerOptions) Validate() error {
 func (c *CoreEtcdOptions) Validate() error {
 	errors := []error{}
 
-	if c.URL == "" {
+	if len(c.URLs) == 0 {
 		errors = append(errors, fmt.Errorf("core etcd url empty"))
 	}
 

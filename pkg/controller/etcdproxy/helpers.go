@@ -2,6 +2,7 @@ package etcdproxy
 
 import (
 	"fmt"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -16,7 +17,7 @@ import (
 // the EtcdStorage resource that 'owns' it.
 func newReplicaSet(etcdstorage *etcdstoragev1alpha1.EtcdStorage,
 	etcdControllerNamespace, etcdProxyNamespace, etcdProxyImage,
-	etcdCoreUrl, etcdCoreCAConfigMapName, etcdCoreCertSecretName string) *appsv1.ReplicaSet {
+	etcdCoreCAConfigMapName, etcdCoreCertSecretName string, etcdCoreURLs []string) *appsv1.ReplicaSet {
 	labels := map[string]string{
 		"controller": "epc",
 	}
@@ -46,7 +47,7 @@ func newReplicaSet(etcdstorage *etcdstoragev1alpha1.EtcdStorage,
 							Image:   etcdProxyImage,
 							Command: []string{"/usr/local/bin/etcd", "grpc-proxy", "start"},
 							Args: []string{
-								flagfromString("endpoints", etcdCoreUrl),
+								flagfromString("endpoints", strings.Join(etcdCoreURLs, ",")),
 								flagfromString("namespace", "/"+etcdProxyNamespace+"/"),
 								"--listen-addr=0.0.0.0:2379",
 								"--cacert=/etc/certs/ca/ca.pem",
@@ -100,8 +101,7 @@ func newReplicaSet(etcdstorage *etcdstoragev1alpha1.EtcdStorage,
 	}
 }
 
-func newService(etcdstorage *etcdstoragev1alpha1.EtcdStorage,
-	etcdControllerNamespace string) *corev1.Service {
+func newService(etcdstorage *etcdstoragev1alpha1.EtcdStorage, etcdControllerNamespace string) *corev1.Service {
 	labels := map[string]string{
 		"controller": "epc",
 	}

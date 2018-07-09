@@ -291,8 +291,8 @@ func (c *EtcdProxyController) syncHandler(key string) error {
 	if errors.IsNotFound(err) {
 		replicaset, err = c.kubeclientset.AppsV1().ReplicaSets(c.config.ControllerNamespace).Create(newReplicaSet(
 			etcdstorage, c.config.ControllerNamespace, etcdstorage.Name,
-			c.config.ProxyImage, c.config.CoreEtcd.URL,
-			c.config.CoreEtcd.CAConfigMapName, c.config.CoreEtcd.CertSecretName))
+			c.config.ProxyImage, c.config.CoreEtcd.CAConfigMapName, c.config.CoreEtcd.CertSecretName,
+			c.config.CoreEtcd.URLs))
 	}
 
 	// If an error occurs during Get/Create, we'll requeue the item so we can
