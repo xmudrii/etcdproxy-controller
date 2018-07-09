@@ -29,8 +29,10 @@ spec:
                 properties:
                   name:
                     type: string
+                    pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$'
                   namespace:
                     type: string
+                    pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
             clientCertSecret:
               type: array
               items:
@@ -39,5 +41,7 @@ spec:
                 properties:
                   name:
                     type: string
+                    pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$'
                   namespace:
                     type: string
+                    pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
