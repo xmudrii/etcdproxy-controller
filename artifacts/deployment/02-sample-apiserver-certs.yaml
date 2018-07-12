@@ -32,11 +32,11 @@ metadata:
   name: etcdproxy-manage-certs
   namespace: k8s-sample-apiserver
 rules:
-- apiGroups: ["v1"]
+- apiGroups: [""]
   resources: ["secrets"]
   verbs: ["get", "update", "patch"]
   resourceNames: ["etcd-client-cert"]
-- apiGroups: ["v1"]
+- apiGroups: [""]
   resources: ["configmaps"]
   verbs: ["get", "update", "patch"]
   resourceNames: ["etcd-serving-ca"]
