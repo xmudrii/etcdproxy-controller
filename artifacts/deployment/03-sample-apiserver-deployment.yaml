@@ -38,7 +38,7 @@ spec:
       - name: sample-apiserver
         image: xmudrii/kube-sample-apiserver
         imagePullPolicy: Always
-        command: ["/kube-sample-apiserver", "--etcd-servers=https://etcd-sample-apiserver.kube-apiserver-storage.svc:2379", "--etcd-cafile=/etc/etcd-certs/ca/ca.pem", "--etcd-certfile=/etc/etcd-certs/client/client.pem", "--etcd-keyfile=/etc/etcd-certs/client/client-key.pem"]
+        command: ["/kube-sample-apiserver", "--etcd-servers=https://etcd-sample-apiserver.kube-apiserver-storage.svc:2379", "--etcd-cafile=/etc/etcd-certs/ca/server-ca.crt", "--etcd-certfile=/etc/etcd-certs/client/tls.crt", "--etcd-keyfile=/etc/etcd-certs/client/tls.key", "--v=7"]
         volumeMounts:
         - mountPath: /etc/etcd-certs/ca
           name: etcd-serving-ca
