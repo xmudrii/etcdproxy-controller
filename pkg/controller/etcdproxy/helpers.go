@@ -53,9 +53,10 @@ func newReplicaSet(etcdstorage *etcdstoragev1alpha1.EtcdStorage,
 								"--cacert=/etc/coreetcd-certs/ca/ca.crt",
 								"--cert=/etc/coreetcd-certs/client/tls.crt",
 								"--key=/etc/coreetcd-certs/client/tls.key",
-								"--trusted-ca-file=/etc/etcdproxy-certs/ca/ca.pem",
-								"--cert-file=/etc/etcdproxy-certs/server/server.pem",
-								"--key-file=/etc/etcdproxy-certs/server/server-key.pem",
+								"--trusted-ca-file=/etc/etcdproxy-certs/ca/client-ca.crt",
+								"--cert-file=/etc/etcdproxy-certs/server/tls.crt",
+								"--key-file=/etc/etcdproxy-certs/server/tls.key",
+								"--debug=true",
 							},
 							Ports: []corev1.ContainerPort{
 								{
@@ -175,7 +176,7 @@ func newConfigMap(etcdstorage *etcdstoragev1alpha1.EtcdStorage, configMapName,
 
 // newSecret creates a Secret in a namespace specified as an argument, with OwnerRef set to the EtcdStorage object.
 func newSecret(etcdstorage *etcdstoragev1alpha1.EtcdStorage, secretName,
-	secretNamespace string, data map[string]string) *corev1.Secret {
+	secretNamespace string, data map[string][]byte) *corev1.Secret {
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,
@@ -184,8 +185,8 @@ func newSecret(etcdstorage *etcdstoragev1alpha1.EtcdStorage, secretName,
 				*metav1.NewControllerRef(etcdstorage, etcdstoragev1alpha1.SchemeGroupVersion.WithKind("EtcdStorage")),
 			},
 		},
-		Type:       "Opaque",
-		StringData: data,
+		Type: "kubernetes.io/tls",
+		Data: data,
 	}
 }
 
