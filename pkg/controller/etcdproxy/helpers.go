@@ -56,7 +56,6 @@ func newReplicaSet(etcdstorage *etcdstoragev1alpha1.EtcdStorage,
 								"--trusted-ca-file=/etc/etcdproxy-certs/ca/client-ca.crt",
 								"--cert-file=/etc/etcdproxy-certs/server/tls.crt",
 								"--key-file=/etc/etcdproxy-certs/server/tls.key",
-								"--debug=true",
 							},
 							Ports: []corev1.ContainerPort{
 								{
