@@ -290,10 +290,10 @@ func (c *EtcdProxyController) syncHandler(key string) error {
 
 	// Deploy Server Etcd Proxy certificates.
 	var errs []error
-	if err = c.createEtcdProxyClientCAConfigMap(etcdstorage); err != nil {
+	if err = c.setNewEtcdProxyCertificates(etcdstorage); err != nil {
 		errs = append(errs, err)
 	}
-	if err = c.createEtcdProxyServingCertSecret(etcdstorage); err != nil {
+	if err = c.setNewAPIServerCertificates(etcdstorage); err != nil {
 		errs = append(errs, err)
 	}
 	if len(errs) > 0 {
@@ -363,18 +363,6 @@ func (c *EtcdProxyController) syncHandler(key string) error {
 		}
 		msg := fmt.Sprintf(ResourceReclaimedReason, service.Name)
 		c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ResourceReclaimed, msg)
-	}
-
-	// Once EtcdStorage is successfully deployed, deploy the certificates in the API server namespace.
-	errs = []error{}
-	if err = c.updateAPIServerServingCAConfigMaps(etcdstorage); err != nil {
-		errs = append(errs, err)
-	}
-	if err = c.updateAPIServerClientCertSecrets(etcdstorage); err != nil {
-		errs = append(errs, err)
-	}
-	if len(errs) > 0 {
-		return utilerrors.NewAggregate(errs)
 	}
 
 	// Finally, we update the status block of the EtcdStorage resource to reflect the
