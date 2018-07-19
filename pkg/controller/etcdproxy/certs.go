@@ -111,113 +111,93 @@ func (c *EtcdProxyController) setNewAPIServerCertificates(etcdstorage *etcdstora
 
 // createEtcdProxyClientCAConfigMap creates ConfigMap in controller namespace with Etcd Proxy CA bundle
 // for verifying incoming client certificates.
-func (c EtcdProxyController) createEtcdProxyClientCAConfigMap(etcdstorage *etcdstoragev1alpha1.EtcdStorage) error {
+func (c EtcdProxyController) createEtcdProxyClientCAConfigMap(etcdstorage *etcdstoragev1alpha1.EtcdStorage,
+	clientSingerCert []byte) error {
 	// ConfigMap in controller namespace for the etcd proxy CA certificate.
-	caConfigMap, err := c.kubeclientset.CoreV1().ConfigMaps(c.config.ControllerNamespace).
+	_, err := c.kubeclientset.CoreV1().ConfigMaps(c.config.ControllerNamespace).
 		Get(etcdProxyCAConfigMapName(etcdstorage), metav1.GetOptions{})
 	if errors.IsNotFound(err) {
-		data := map[string]string{"ca.pem": EtcdProxyClientCACert}
+		data := map[string]string{"client-ca.crt": string(clientSingerCert)}
 		_, err = c.kubeclientset.CoreV1().ConfigMaps(c.config.ControllerNamespace).
 			Create(newConfigMap(etcdstorage, etcdProxyCAConfigMapName(etcdstorage), c.config.ControllerNamespace, data))
 		if err != nil {
+			// TODO: refactor event handling (hint: see #40).
 			c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrUnknown, err.Error())
 			return err
 		}
 		return nil
 	}
 	if err != nil {
+		// TODO: refactor event handling (hint: see #40).
 		c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrUnknown, err.Error())
 		return err
 	}
-
-	caConfigMapCopy := caConfigMap.DeepCopy()
-	caConfigMapCopy.Data = map[string]string{"ca.pem": EtcdProxyClientCACert}
-
-	// Check is ConfigMap owned by EtcdStorage resource, and if not update the OwnerRef.
-	if !metav1.IsControlledBy(caConfigMap, etcdstorage) {
-		caConfigMapCopy.SetOwnerReferences([]metav1.OwnerReference{
-			*metav1.NewControllerRef(etcdstorage, etcdstoragev1alpha1.SchemeGroupVersion.WithKind("EtcdStorage")),
-		})
-	}
-
-	if !equality.Semantic.DeepEqual(caConfigMap, caConfigMapCopy) {
-		_, err = c.kubeclientset.CoreV1().ConfigMaps(c.config.ControllerNamespace).Update(caConfigMapCopy)
-		if err != nil {
-			c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrUnknown, err.Error())
-			return err
-		}
-	}
-
 	return nil
 }
 
 // createEtcdProxyServingCertSecret creates Secret in controller namespace with Etcd Proxy serving certificate and key.
-func (c EtcdProxyController) createEtcdProxyServingCertSecret(etcdstorage *etcdstoragev1alpha1.EtcdStorage) error {
+func (c EtcdProxyController) createEtcdProxyServingCertSecret(etcdstorage *etcdstoragev1alpha1.EtcdStorage,
+	serverCert, serverKey []byte) error {
 	// Secret for the etcd proxy server certs in controller namespace.
-	certsSecret, err := c.kubeclientset.CoreV1().Secrets(c.config.ControllerNamespace).
+	_, err := c.kubeclientset.CoreV1().Secrets(c.config.ControllerNamespace).
 		Get(etcdProxyServerCertsSecret(etcdstorage), metav1.GetOptions{})
 	if errors.IsNotFound(err) {
-		data := map[string]string{
-			"server.pem":     EtcdProxyServerCert,
-			"server-key.pem": EtcdProxyServerKey,
+		data := map[string][]byte{
+			"tls.crt": serverCert,
+			"tls.key": serverKey,
 		}
 		_, err = c.kubeclientset.CoreV1().Secrets(c.config.ControllerNamespace).
 			Create(newSecret(etcdstorage, etcdProxyServerCertsSecret(etcdstorage), c.config.ControllerNamespace, data))
 		if err != nil {
+			// TODO: refactor event handling (hint: see #40).
 			c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrUnknown, err.Error())
 			return err
 		}
 		return nil
 	}
 	if err != nil {
+		// TODO: refactor event handling (hint: see #40).
 		c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrUnknown, err.Error())
 		return err
 	}
-
-	certsSecretCopy := certsSecret.DeepCopy()
-	certsSecretCopy.StringData = map[string]string{
-		"server.pem":     EtcdProxyServerCert,
-		"server-key.pem": EtcdProxyServerKey,
-	}
-
-	// Secret found, we're checking OwnerRef to make sure controller owns it.
-	if !metav1.IsControlledBy(certsSecret, etcdstorage) {
-		certsSecretCopy.SetOwnerReferences([]metav1.OwnerReference{
-			*metav1.NewControllerRef(etcdstorage, etcdstoragev1alpha1.SchemeGroupVersion.WithKind("EtcdStorage")),
-		})
-	}
-
-	if !equality.Semantic.DeepEqual(certsSecret, certsSecretCopy) {
-		_, err = c.kubeclientset.CoreV1().Secrets(c.config.ControllerNamespace).Update(certsSecretCopy)
-		if err != nil {
-			c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrUnknown, err.Error())
-			return err
-		}
-	}
-
 	return nil
 }
 
 // updateAPIServerServingCAConfigMaps updates the ConfigMap in the aggregated API server namespace with the CA certificate.
-func (c *EtcdProxyController) updateAPIServerServingCAConfigMaps(etcdstorage *etcdstoragev1alpha1.EtcdStorage) error {
+func (c *EtcdProxyController) updateAPIServerServingCAConfigMaps(etcdstorage *etcdstoragev1alpha1.EtcdStorage,
+	serverSignerCert []byte) error {
 	var errs []error
 	// Check are ConfigMap name and namespace provided.
 	for _, configMap := range etcdstorage.Spec.CACertConfigMaps {
 		caConfigMap, err := c.kubeclientset.CoreV1().ConfigMaps(configMap.Namespace).
 			Get(configMap.Name, metav1.GetOptions{})
 		if err != nil {
+			// TODO: refactor event handling (hint: see #40).
 			c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrUnknown, err.Error())
 			errs = append(errs, err)
 			continue
 		}
 
 		caConfigMapCopy := caConfigMap.DeepCopy()
-		caConfigMapCopy.Data = map[string]string{"ca.pem": EtcdProxyServingCACert}
+		caConfigMapCopy.Data = map[string]string{"server-ca.crt": string(serverSignerCert)}
+
+		if val, ok := caConfigMapCopy.Annotations[annCertificateGenerated]; ok == true {
+			if val == "true" {
+				return nil
+			}
+		}
+
+		// TODO: extend annotations to include more information about certs, including expiry date, etc.
+		// HINT: take a look at openshift/service-serving-cert-signer for ideas.
+		caConfigMapCopy.Annotations = map[string]string{
+			annCertificateGenerated: "true",
+		}
 
 		// Check are ConfigMaps different and perform update if they are.
 		if !equality.Semantic.DeepEqual(caConfigMap, caConfigMapCopy) {
 			_, err = c.kubeclientset.CoreV1().ConfigMaps(caConfigMapCopy.Namespace).Update(caConfigMapCopy)
 			if err != nil {
+				// TODO: refactor event handling (hint: see #40).
 				c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrUnknown, err.Error())
 				errs = append(errs, err)
 			}
@@ -229,31 +209,47 @@ func (c *EtcdProxyController) updateAPIServerServingCAConfigMaps(etcdstorage *et
 
 // updateAPIServerClientCertSecrets updates the Secret in the aggregated API server namespace
 // with the client certificate and key.
-func (c *EtcdProxyController) updateAPIServerClientCertSecrets(etcdstorage *etcdstoragev1alpha1.EtcdStorage) error {
+func (c *EtcdProxyController) updateAPIServerClientCertSecrets(etcdstorage *etcdstoragev1alpha1.EtcdStorage,
+	clientCert, clientKey []byte) error {
 	var errs []error
 	for _, secret := range etcdstorage.Spec.ClientCertSecrets {
 		certSecret, err := c.kubeclientset.CoreV1().Secrets(secret.Namespace).Get(secret.Name, metav1.GetOptions{})
 		if err != nil {
+			// TODO: refactor event handling (hint: see #40).
 			c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrUnknown, err.Error())
 			errs = append(errs, err)
 			continue
 		}
 
 		certSecretCopy := certSecret.DeepCopy()
-		certSecretCopy.StringData = map[string]string{
-			"client.pem":     EtcdProxyClientCert,
-			"client-key.pem": EtcdProxyClientKey,
+		certSecretCopy.Type = "kubernetes.io/tls"
+		certSecretCopy.Data = map[string][]byte{
+			"tls.crt": clientCert,
+			"tls.key": clientKey,
+		}
+
+		if val, ok := certSecretCopy.Annotations[annCertificateGenerated]; ok == true {
+			if val == "true" {
+				return nil
+			}
+		}
+
+		// TODO: extend annotations to include more information about certs, including expiry date, etc.
+		// HINT: take a look at openshift/service-serving-cert-signer for ideas.
+		certSecretCopy.Annotations = map[string]string{
+			annCertificateGenerated: "true",
 		}
 
 		// Check are Secrets different and perform update if they are.
 		if !equality.Semantic.DeepEqual(certSecret, certSecretCopy) {
 			_, err = c.kubeclientset.CoreV1().Secrets(certSecretCopy.Namespace).Update(certSecretCopy)
 			if err != nil {
+				// TODO: refactor event handling (hint: see #40).
 				c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrUnknown, err.Error())
 				errs = append(errs, err)
 			}
 		}
 	}
 
-	return utilerrors.NewAggregate(errs)
+	return nil
 }
