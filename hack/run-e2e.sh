@@ -41,6 +41,11 @@ GOCACHE=off go test -v ${SCRIPT_ROOT}/test/e2e/...
 
 echo -e '- EtcdStorage tests completed successfully!\n'
 
+# Cleanup
+echo '- Preparing for sample-apiserver deployment: Clean-up ConfigMap and Secret.'
+kubectl delete -f ${SCRIPT_ROOT}/artifacts/deployment/02-sample-apiserver-certs.yaml
+kubectl create -f ${SCRIPT_ROOT}/artifacts/deployment/02-sample-apiserver-certs.yaml
+
 # Test deploying the sample-apiserver.
 echo '- Testing sample-apiserver deployment:'
 echo '* Deploying sample-apiserver.'
