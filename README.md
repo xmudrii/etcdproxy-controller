@@ -29,16 +29,16 @@ When running out-of-cluster, the etcd URL can be changed using the `etcd-core-ur
 
 When deploying the core etcd using the provided manifests, you can deploy the client certificates using the `etcd-client-certs.yaml` manifest. [The README of `artifacts/etcd`](artifacts/etcd) contains more details about deploying the client certificates.
 
-If you're deploying etcd using another method, the `EtcdProxyController` requires you to provide it the CA certificate (`ca.pem`) as a ConfigMap,
-and the client certificate (`client.pem`) and key (`client-key.pem`) as a Secret, in the controller namespace:
+If you're deploying etcd using another method, the `EtcdProxyController` requires you to provide it the CA certificate (`ca.crt`) as a ConfigMap,
+and the client certificate (`tls.crt`) and key (`tls.key`) as a Secret, in the controller namespace:
 
 * The ConfigMap is by default called `etcd-coreserving-ca` (can be configured using the `--etcd-core-ca-configmap` flag),
 * The Secret is by default called `etcd-coreserving-cert` (can be configured using the `--etcd-core-ca-secret` flag).
 
 The ConfigMap and Secret can be created using the following `kubectl` commands:
 ```
-kubectl create configmap etcd-coreserving-ca --from-file=ca.pem -n kube-apiserver-storage
-kubectl create secret generic etcd-coreserving-cert --from-file=client.pem --from-file=client-key.pem -n kube-apiserver-storage
+kubectl create configmap etcd-coreserving-ca --from-file=ca.crt -n kube-apiserver-storage
+kubectl create secret tls etcd-coreserving-cert --from-file=tls.crt --from-file=tls.key -n kube-apiserver-storage
 ```
 
 ### Running out-of-cluster
