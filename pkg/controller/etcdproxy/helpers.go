@@ -184,7 +184,7 @@ func newSecret(etcdstorage *etcdstoragev1alpha1.EtcdStorage, secretName,
 				*metav1.NewControllerRef(etcdstorage, etcdstoragev1alpha1.SchemeGroupVersion.WithKind("EtcdStorage")),
 			},
 		},
-		Type: "kubernetes.io/tls",
+		Type: corev1.SecretTypeTLS,
 		Data: data,
 	}
 }

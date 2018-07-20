@@ -179,13 +179,13 @@ func (c *EtcdProxyController) updateAPIServerServingCAConfigMaps(etcdstorage *et
 		}
 
 		caConfigMapCopy := caConfigMap.DeepCopy()
-		caConfigMapCopy.Data = map[string]string{"server-ca.crt": string(serverSignerCert)}
-
 		if val, ok := caConfigMapCopy.Annotations[annCertificateGenerated]; ok == true {
 			if val == "true" {
 				continue
 			}
 		}
+
+		caConfigMapCopy.Data = map[string]string{"server-ca.crt": string(serverSignerCert)}
 
 		// TODO: extend annotations to include more information about certs, including expiry date, etc.
 		// HINT: take a look at openshift/service-serving-cert-signer for ideas.
@@ -222,16 +222,23 @@ func (c *EtcdProxyController) updateAPIServerClientCertSecrets(etcdstorage *etcd
 		}
 
 		certSecretCopy := certSecret.DeepCopy()
-		certSecretCopy.Type = "kubernetes.io/tls"
-		certSecretCopy.Data = map[string][]byte{
-			"tls.crt": clientCert,
-			"tls.key": clientKey,
-		}
 
+		if certSecretCopy.Type != corev1.SecretTypeTLS {
+			err = fmt.Errorf("certificates secret must be type of %s", corev1.SecretTypeTLS)
+			// TODO: refactor event handling (hint: see #40).
+			c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrUnknown, err.Error())
+			errs = append(errs, err)
+			continue
+		}
 		if val, ok := certSecretCopy.Annotations[annCertificateGenerated]; ok == true {
 			if val == "true" {
 				continue
 			}
+		}
+
+		certSecretCopy.Data = map[string][]byte{
+			"tls.crt": clientCert,
+			"tls.key": clientKey,
 		}
 
 		// TODO: extend annotations to include more information about certs, including expiry date, etc.
