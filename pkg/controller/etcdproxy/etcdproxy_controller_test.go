@@ -60,6 +60,8 @@ func TestSyncHandler(t *testing.T) {
 				Name:      name,
 				Namespace: namespace,
 			},
+			// TODO: add a test case when secret is not v1.SecretTypeTLS.
+			Type: v1.SecretTypeTLS,
 		}
 	}
 
