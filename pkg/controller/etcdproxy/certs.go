@@ -189,7 +189,7 @@ func (c *EtcdProxyController) updateAPIServerServingCAConfigMaps(etcdstorage *et
 		}
 
 		caConfigMapCopy := caConfigMap.DeepCopy()
-		if val, ok := caConfigMapCopy.Annotations[annCertificateGenerated]; ok == true {
+		if val, ok := caConfigMapCopy.Annotations[annCertificateGenerated]; ok {
 			if val == "true" {
 				continue
 			}
@@ -236,7 +236,7 @@ func (c *EtcdProxyController) updateAPIServerClientCertSecrets(etcdstorage *etcd
 		c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrUnknown, err.Error())
 		return err
 	}
-	if val, ok := certSecretCopy.Annotations[annCertificateGenerated]; ok == true {
+	if val, ok := certSecretCopy.Annotations[annCertificateGenerated]; ok {
 		if val == "true" {
 			return nil
 		}
