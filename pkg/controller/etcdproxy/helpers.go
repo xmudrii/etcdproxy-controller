@@ -19,7 +19,7 @@ func newReplicaSet(etcdstorage *etcdstoragev1alpha1.EtcdStorage,
 	etcdControllerNamespace, etcdProxyNamespace, etcdProxyImage,
 	etcdCoreCAConfigMapName, etcdCoreCertSecretName string, etcdCoreURLs []string) *appsv1.ReplicaSet {
 	labels := map[string]string{
-		"controller": "epc",
+		"apiserver": etcdstorage.Name,
 	}
 	replicas := int32(1)
 
@@ -134,7 +134,7 @@ func newReplicaSet(etcdstorage *etcdstoragev1alpha1.EtcdStorage,
 
 func newService(etcdstorage *etcdstoragev1alpha1.EtcdStorage, etcdControllerNamespace string) *corev1.Service {
 	labels := map[string]string{
-		"controller": "epc",
+		"apiserver": etcdstorage.Name,
 	}
 
 	return &corev1.Service{
