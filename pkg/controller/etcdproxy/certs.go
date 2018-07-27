@@ -94,7 +94,8 @@ func (c *EtcdProxyController) setNewAPIServerCertificates(etcdstorage *etcdstora
 	var errs []error
 	for _, secret := range etcdstorage.Spec.ClientCertSecrets {
 		// Generate client certificate/key pair.
-		clientBundle, err := clientSigner.NewClientCertificate(pkix.Name{CommonName: "client"},
+		clientBundle, err := clientSigner.NewClientCertificate(pkix.Name{CommonName: fmt.Sprintf("client-%s-%s",
+			secret.Namespace, secret.Name)},
 			r.Int63n(100000), currentTime)
 		if err != nil {
 			errs = append(errs, err)
@@ -113,7 +114,9 @@ func (c *EtcdProxyController) setNewAPIServerCertificates(etcdstorage *etcdstora
 
 		// Write certificate and key pair to the Secret.
 		err = c.updateAPIServerClientCertSecrets(etcdstorage, secret, clientCertBytes, clientKeyBytes)
-		errs = append(errs, err)
+		if err != nil {
+			errs = append(errs, err)
+		}
 	}
 
 	return utilerrors.NewAggregate(errs)
