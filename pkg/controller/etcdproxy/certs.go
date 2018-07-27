@@ -66,8 +66,6 @@ func (c *EtcdProxyController) setNewEtcdProxyCertificates(etcdstorage *etcdstora
 // setNewAPIServerCertificates generates new self-signed client signer and client certificate/key pair.
 // Self-signed client signer cert is stored in Controller ConfigMap to be used as CA, while client cert/key pair
 // is stored in Controller Secret to be used by apiserver.
-// TODO: this should generate new certificate for each configmap. But there's a problem here, as we need to match
-// etcd ca certificate and client certificates.
 func (c *EtcdProxyController) setNewAPIServerCertificates(etcdstorage *etcdstoragev1alpha1.EtcdStorage) error {
 	currentTime := time.Now
 	r := rand.New(rand.NewSource(currentTime().UnixNano()))
@@ -86,27 +84,42 @@ func (c *EtcdProxyController) setNewAPIServerCertificates(etcdstorage *etcdstora
 		return err
 	}
 
-	// Generate client certificate/key pair.
-	clientBundle, err := clientSigner.NewClientCertificate(pkix.Name{CommonName: "client"},
-		r.Int63n(100000), currentTime)
-	if err != nil {
-		return err
-	}
-	clientCertBytes, err := certs.EncodeCertificates(clientBundle.Certificates...) // goes to apiserver
-	if err != nil {
-		return err
-	}
-	clientKeyBytes, err := certs.EncodeKey(clientBundle.Key) // goes to apiserver
-	if err != nil {
-		return err
-	}
-
-	// Write pairs to appropriate ConfigMaps and Secrets.
+	// Write CA certificate to EtcdProxyController CA ConfigMap.
 	err = c.createEtcdProxyClientCAConfigMap(etcdstorage, clientSignerCert)
 	if err != nil {
 		return err
 	}
-	return c.updateAPIServerClientCertSecrets(etcdstorage, clientCertBytes, clientKeyBytes)
+
+	// Generate client certificate for each Secret provided.
+	var errs []error
+	for _, secret := range etcdstorage.Spec.ClientCertSecrets {
+		// Generate client certificate/key pair.
+		clientBundle, err := clientSigner.NewClientCertificate(pkix.Name{CommonName: fmt.Sprintf("client-%s-%s",
+			secret.Namespace, secret.Name)},
+			r.Int63n(100000), currentTime)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		clientCertBytes, err := certs.EncodeCertificates(clientBundle.Certificates...) // goes to apiserver
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		clientKeyBytes, err := certs.EncodeKey(clientBundle.Key) // goes to apiserver
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+
+		// Write certificate and key pair to the Secret.
+		err = c.updateAPIServerClientCertSecrets(etcdstorage, secret, clientCertBytes, clientKeyBytes)
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	return utilerrors.NewAggregate(errs)
 }
 
 // createEtcdProxyClientCAConfigMap creates ConfigMap in controller namespace with Etcd Proxy CA bundle
@@ -179,7 +192,7 @@ func (c *EtcdProxyController) updateAPIServerServingCAConfigMaps(etcdstorage *et
 		}
 
 		caConfigMapCopy := caConfigMap.DeepCopy()
-		if val, ok := caConfigMapCopy.Annotations[annCertificateGenerated]; ok == true {
+		if val, ok := caConfigMapCopy.Annotations[annCertificateGenerated]; ok {
 			if val == "true" {
 				continue
 			}
@@ -210,53 +223,48 @@ func (c *EtcdProxyController) updateAPIServerServingCAConfigMaps(etcdstorage *et
 // updateAPIServerClientCertSecrets updates the Secret in the aggregated API server namespace
 // with the client certificate and key.
 func (c *EtcdProxyController) updateAPIServerClientCertSecrets(etcdstorage *etcdstoragev1alpha1.EtcdStorage,
-	clientCert, clientKey []byte) error {
-	var errs []error
-	for _, secret := range etcdstorage.Spec.ClientCertSecrets {
-		certSecret, err := c.kubeclientset.CoreV1().Secrets(secret.Namespace).Get(secret.Name, metav1.GetOptions{})
-		if err != nil {
-			// TODO: refactor event handling (hint: see #40).
-			c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrUnknown, err.Error())
-			errs = append(errs, err)
-			continue
-		}
+	secret etcdstoragev1alpha1.ClientCertificateDestination, clientCert, clientKey []byte) error {
+	certSecret, err := c.kubeclientset.CoreV1().Secrets(secret.Namespace).Get(secret.Name, metav1.GetOptions{})
+	if err != nil {
+		// TODO: refactor event handling (hint: see #40).
+		c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrUnknown, err.Error())
+		return err
+	}
 
-		certSecretCopy := certSecret.DeepCopy()
+	certSecretCopy := certSecret.DeepCopy()
 
-		if certSecretCopy.Type != corev1.SecretTypeTLS {
-			err = fmt.Errorf("certificates secret must be type of %s", corev1.SecretTypeTLS)
-			// TODO: refactor event handling (hint: see #40).
-			c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrUnknown, err.Error())
-			errs = append(errs, err)
-			continue
-		}
-		if val, ok := certSecretCopy.Annotations[annCertificateGenerated]; ok == true {
-			if val == "true" {
-				continue
-			}
-		}
-
-		certSecretCopy.Data = map[string][]byte{
-			"tls.crt": clientCert,
-			"tls.key": clientKey,
-		}
-
-		// TODO: extend annotations to include more information about certs, including expiry date, etc.
-		// HINT: take a look at openshift/service-serving-cert-signer for ideas.
-		certSecretCopy.Annotations = map[string]string{
-			annCertificateGenerated: "true",
-		}
-
-		// Check are Secrets different and perform update if they are.
-		if !equality.Semantic.DeepEqual(certSecret, certSecretCopy) {
-			_, err = c.kubeclientset.CoreV1().Secrets(certSecretCopy.Namespace).Update(certSecretCopy)
-			if err != nil {
-				// TODO: refactor event handling (hint: see #40).
-				c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrUnknown, err.Error())
-				errs = append(errs, err)
-			}
+	if certSecretCopy.Type != corev1.SecretTypeTLS {
+		err = fmt.Errorf("certificates secret must be type of kubernetes.io/tls")
+		// TODO: refactor event handling (hint: see #40).
+		c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrUnknown, err.Error())
+		return err
+	}
+	if val, ok := certSecretCopy.Annotations[annCertificateGenerated]; ok {
+		if val == "true" {
+			return nil
 		}
 	}
 
-	return utilerrors.NewAggregate(errs)
+	certSecretCopy.Data = map[string][]byte{
+		"tls.crt": clientCert,
+		"tls.key": clientKey,
+	}
+
+	// TODO: extend annotations to include more information about certs, including expiry date, etc.
+	// HINT: take a look at openshift/service-serving-cert-signer for ideas.
+	certSecretCopy.Annotations = map[string]string{
+		annCertificateGenerated: "true",
+	}
+
+	// Check are Secrets different and perform update if they are.
+	if !equality.Semantic.DeepEqual(certSecret, certSecretCopy) {
+		_, err = c.kubeclientset.CoreV1().Secrets(certSecretCopy.Namespace).Update(certSecretCopy)
+		if err != nil {
+			// TODO: refactor event handling (hint: see #40).
+			c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrUnknown, err.Error())
+			return err
+		}
+	}
+
+	return nil
 }
