@@ -35,7 +35,7 @@ func (c *EtcdProxyController) setNewEtcdProxyCertificates(etcdstorage *etcdstora
 	if err != nil {
 		return err
 	}
-	serverSignerCert, err := certs.EncodeCertificates(serverSigner.Certificates...)
+	serverSignerCert, _, err := serverSigner.GetPEMBytes()
 	if err != nil {
 		return err
 	}
@@ -46,11 +46,7 @@ func (c *EtcdProxyController) setNewEtcdProxyCertificates(etcdstorage *etcdstora
 	if err != nil {
 		return err
 	}
-	serverCertBytes, err := certs.EncodeCertificates(serverBundle.Certificates...)
-	if err != nil {
-		return err
-	}
-	serverKeyBytes, err := certs.EncodeKey(serverBundle.Key)
+	serverCertBytes, serverKeyBytes, err := serverBundle.GetPEMBytes()
 	if err != nil {
 		return err
 	}
@@ -79,16 +75,13 @@ func (c *EtcdProxyController) setNewAPIServerCertificates(etcdstorage *etcdstora
 	if err != nil {
 		return err
 	}
-	clientSignerCert, err := certs.EncodeCertificates(clientSigner.Certificates...) // goes to etcdproxy
+	clientSignerCert, _, err := clientSigner.GetPEMBytes() // goes to etcdproxy
 	if err != nil {
 		return err
 	}
 
 	// Write CA certificate to EtcdProxyController CA ConfigMap.
 	err = c.createEtcdProxyClientCAConfigMap(etcdstorage, clientSignerCert)
-	if err != nil {
-		return err
-	}
 
 	// Generate client certificate for each Secret provided.
 	var errs []error
@@ -101,12 +94,7 @@ func (c *EtcdProxyController) setNewAPIServerCertificates(etcdstorage *etcdstora
 			errs = append(errs, err)
 			continue
 		}
-		clientCertBytes, err := certs.EncodeCertificates(clientBundle.Certificates...) // goes to apiserver
-		if err != nil {
-			errs = append(errs, err)
-			continue
-		}
-		clientKeyBytes, err := certs.EncodeKey(clientBundle.Key) // goes to apiserver
+		clientCertBytes, clientKeyBytes, err := clientBundle.GetPEMBytes() // goes to apiserver
 		if err != nil {
 			errs = append(errs, err)
 			continue
