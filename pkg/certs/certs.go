@@ -6,10 +6,14 @@ import (
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
 	"net"
+	"time"
+
+	"k8s.io/client-go/util/cert"
 )
 
 var (
@@ -24,6 +28,59 @@ var (
 type Certificate struct {
 	Certificates []*x509.Certificate
 	Key          crypto.PrivateKey
+}
+
+// ParseCertificateBytes converts PEM formatted certificate to the Certificate struct.
+// Key is allowed to be empty, as there is cases when we're not storing it (e.g. CA bundles).
+func ParseCertificateBytes(certBytes, keyBytes []byte) (*Certificate, error) {
+	certs, err := cert.ParseCertsPEM(certBytes)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing certificates: %v", err)
+	}
+
+	var key crypto.PrivateKey
+	if len(keyBytes) != 0 {
+		keyPairCert, err := tls.X509KeyPair(certBytes, keyBytes)
+		if err != nil {
+			return nil, err
+		}
+		key = keyPairCert.PrivateKey
+	}
+
+	return &Certificate{certs, key}, nil
+}
+
+// FilterExpiredCerts checks are all certificates in the bundle valid, i.e. they have not expired.
+// The function returns new bundle with only valid certificates or error if no valid certificate is found.
+func FilterExpiredCerts(certs ...*x509.Certificate) []*x509.Certificate {
+	currentTime := time.Now()
+	var validCerts []*x509.Certificate
+	for _, c := range certs {
+		if c.NotAfter.After(currentTime) {
+			validCerts = append(validCerts, c)
+		}
+	}
+
+	return validCerts
+}
+
+// GetPEMBytes converts x509-formatted Certificate and Key to the PEM bytes.
+// Key is allowed to be empty because we may not have a key (e.g. CA bundles).
+func (c *Certificate) GetPEMBytes() ([]byte, []byte, error) {
+	certs, err := encodeCertificates(c.Certificates...)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var key []byte
+	if c.Key != nil {
+		key, err = encodeKey(c.Key)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	return certs, key, nil
 }
 
 // newKeyPair generates new public and private key.
@@ -60,6 +117,7 @@ func (c *Certificate) signCertificate(cert *x509.Certificate, certPublicKey cryp
 	return signCertificate(cert, certPublicKey, c.Certificates[0], c.Key)
 }
 
+// ipAddressesDNSNames returns IP addressed and domains that certificate is valid for.
 func ipAddressesDNSNames(hosts []string) ([]net.IP, []string) {
 	var ips []net.IP
 	var dns []string
@@ -82,8 +140,8 @@ func ipAddressesDNSNames(hosts []string) ([]net.IP, []string) {
 	return ips, dns
 }
 
-// EncodeCertificates converts x509 Certificate to bytes.
-func EncodeCertificates(certs ...*x509.Certificate) ([]byte, error) {
+// encodeCertificates converts x509 Certificate to bytes.
+func encodeCertificates(certs ...*x509.Certificate) ([]byte, error) {
 	b := bytes.Buffer{}
 	for _, cert := range certs {
 		if err := pem.Encode(&b, &pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw}); err != nil {
@@ -93,8 +151,8 @@ func EncodeCertificates(certs ...*x509.Certificate) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-// EncodeKey converts private key to bytes.
-func EncodeKey(key crypto.PrivateKey) ([]byte, error) {
+// encodeKey converts private key to bytes.
+func encodeKey(key crypto.PrivateKey) ([]byte, error) {
 	b := bytes.Buffer{}
 	switch key := key.(type) {
 	case *ecdsa.PrivateKey:
