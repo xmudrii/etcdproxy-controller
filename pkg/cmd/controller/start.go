@@ -64,7 +64,7 @@ func RunController(config *etcdproxy.EtcdProxyControllerConfig, stopCh <-chan st
 	etcdproxyInformers := informers.NewSharedInformerFactory(etcdproxyClient, 10*time.Minute)
 
 	controller := etcdproxy.NewEtcdProxyController(kubeClient, etcdproxyClient,
-		kubeInformersNamespaced.Apps().V1().ReplicaSets(),
+		kubeInformersNamespaced.Apps().V1().Deployments(),
 		kubeInformersNamespaced.Core().V1().Services(),
 		etcdproxyInformers.Etcd().V1alpha1().EtcdStorages(), config)
 

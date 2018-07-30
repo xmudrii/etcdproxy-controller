@@ -27,7 +27,7 @@ func TestDeployEtcdStorage(t *testing.T) {
 	tests := []struct {
 		name                   string
 		etcdStorage            *v1alpha1.EtcdStorage
-		expectedReplicaSetName string
+		expectedDeploymentName string
 		expectedReplicas       int32
 		expectedServiceName    string
 	}{
@@ -52,7 +52,7 @@ func TestDeployEtcdStorage(t *testing.T) {
 					},
 				},
 			},
-			expectedReplicaSetName: "etcd-rs-es-test-1",
+			expectedDeploymentName: "etcd-es-test-1",
 			expectedReplicas:       int32(1),
 			expectedServiceName:    "etcd-es-test-1",
 		},
@@ -67,7 +67,7 @@ func TestDeployEtcdStorage(t *testing.T) {
 					ClientCertSecrets: []v1alpha1.ClientCertificateDestination{},
 				},
 			},
-			expectedReplicaSetName: "etcd-rs-es-test-2",
+			expectedDeploymentName: "etcd-es-test-2",
 			expectedReplicas:       int32(1),
 			expectedServiceName:    "etcd-es-test-2",
 		},
@@ -80,7 +80,7 @@ func TestDeployEtcdStorage(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// It takes short amount time for the ReplicaSet and Service to be created, so we need to poll.
+			// It takes short amount time for the Deployment and Service to be created, so we need to poll.
 			err = wait.Poll(500*time.Millisecond, wait.ForeverTestTimeout, func() (bool, error) {
 				es, err = etcdproxyClient.EtcdV1alpha1().EtcdStorages().Get(es.Name, metav1.GetOptions{})
 				if err != nil {
@@ -117,13 +117,13 @@ func TestDeployEtcdStorage(t *testing.T) {
 				}
 			}
 
-			// Check is the ReplicaSet created and wait for pods to become ready.
+			// Check is the Deployment created and wait for pods to become ready.
 			err = wait.Poll(500*time.Millisecond, wait.ForeverTestTimeout, func() (bool, error) {
-				rs, err := client.AppsV1().ReplicaSets("kube-apiserver-storage").Get(tc.expectedReplicaSetName, metav1.GetOptions{})
+				ds, err := client.AppsV1().Deployments("kube-apiserver-storage").Get(tc.expectedDeploymentName, metav1.GetOptions{})
 				if err != nil {
 					return false, err
 				}
-				if rs.Status.ReadyReplicas != tc.expectedReplicas {
+				if ds.Status.ReadyReplicas != tc.expectedReplicas {
 					return false, nil
 				}
 				return true, nil

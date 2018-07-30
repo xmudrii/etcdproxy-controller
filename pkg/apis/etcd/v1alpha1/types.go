@@ -21,7 +21,7 @@ const (
 type EtcdStorageConditionType string
 
 const (
-	// Deployed means EtcdProxy ReplicaSet and Service for exposing EtcdProxy are created.
+	// Deployed means EtcdProxy Deployment and Service for exposing EtcdProxy are created.
 	Deployed EtcdStorageConditionType = "Deployed"
 )
 

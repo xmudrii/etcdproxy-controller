@@ -8,15 +8,15 @@ import (
 	"github.com/xmudrii/etcdproxy-controller/pkg/apis/etcd/v1alpha1"
 )
 
-func TestGetReplicaSetName(t *testing.T) {
+func TestGetDeploymentName(t *testing.T) {
 	es := &v1alpha1.EtcdStorage{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-1"},
 	}
 
-	name := replicaSetName(es)
-	expectedName := "etcd-rs-test-1"
+	name := deploymentName(es)
+	expectedName := "etcd-test-1"
 	if name != expectedName {
-		t.Fatalf("incorrect replicaset name. expected: %s, got: %s", expectedName, name)
+		t.Fatalf("incorrect deployment name. expected: %s, got: %s", expectedName, name)
 	}
 }
 
@@ -28,7 +28,7 @@ func TestGetServiceName(t *testing.T) {
 	name := serviceName(es)
 	expectedName := "etcd-test-1"
 	if name != expectedName {
-		t.Fatalf("incorrect replicaset name. expected: %s, got: %s", expectedName, name)
+		t.Fatalf("incorrect service name. expected: %s, got: %s", expectedName, name)
 	}
 }
 
