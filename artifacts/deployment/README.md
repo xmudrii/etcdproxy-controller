@@ -4,13 +4,13 @@ This directory contains the `00-etcdproxy-controller.yaml` manifest, used for de
 
 * **namespace/kube-apiserver-storage** - namespace for the EtcdProxyController to lives in,
 
-* **sa/etcdproxy-controller-sa** - ServiceAccount for managing EtcdStorage objects, ReplicaSets and Services, Secrets and ConfigMaps,
+* **sa/etcdproxy-controller-sa** - ServiceAccount for managing EtcdStorage objects, Deployments and Services, Secrets and ConfigMaps,
 * **sa/etcdproxy-sa** - ServiceAccount used by EtcdProxy Pods. Does not have any permissions,
 
 * **clusterrole/etcdproxy-crd-clusterrole** - ClusterRole for managing EtcdStorages.
 * **clusterrolebinding/etcdproxy-crd-clusterrolebinding** - Binds **clusterrole/etcdproxy-crd-clusterrole** to **serviceaccount/etcdproxy-controller-sa**.
 
-* **role/etcdproxy-controller-role** - Role for managing ReplicaSets, Services, ConfigMap and Secrets in the **kube-apiserver-storage** namespace.
+* **role/etcdproxy-controller-role** - Role for managing Deployments, Services, ConfigMap and Secrets in the **kube-apiserver-storage** namespace.
 * **rolebinding/etcdproxy-controller-rolebinding** - Binds **role/etcdproxy-controller-role** to **serviceaccount/etcdproxy-controller-sa**.
 
 * **customresourcedefinition/etcdstorages.etcd.xmudrii.com** - CRD defining the EtcdStorage type for managing etcd proxies,

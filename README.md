@@ -75,7 +75,7 @@ The sample manifest is located in the `artifacts/etcdstorage` directory, and you
 kubectl create -f artifacts/etcdstorage/example-etcdstorage.yaml
 ```
 
-Once the `EtcdStorage` is deployed, the controller creates the ReplicaSet for EtcdProxy pods, and a Service to expose the pods.
+Once the `EtcdStorage` is deployed, the controller creates a Deployment for EtcdProxy pods, and a Service to expose the pods.
 
 Then, you can use the etcd for your aggregated API server, over the URL such as `http://etcd-<name-of-etcdstorage-object>.kube-apiserver-storage.svc:2379`.
 In case of the sample manifest, etcd is available on `http://etcd-etcd-name.kube-apiserver-storage.svc:2379`.
