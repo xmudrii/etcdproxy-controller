@@ -9,7 +9,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// CoreEtcdOptions type is used to wire the core etcd information used by controller to create ReplicaSets.
+// CoreEtcdOptions type is used to wire the core etcd information used by controller to create Deployments.
 type CoreEtcdOptions struct {
 	// URLs contains the core etcd addresses.
 	URLs []string
@@ -25,7 +25,7 @@ type CoreEtcdOptions struct {
 
 // EtcdProxyControllerOptions type is used to pass information from cli to the controller.
 type EtcdProxyControllerOptions struct {
-	// CoreEtcd contains information needed to wire up ReplicaSets and the core etcd.
+	// CoreEtcd contains information needed to wire up Deployments and the core etcd.
 	CoreEtcd *CoreEtcdOptions
 
 	// ControllerNamespace is name of namespace where controller is deployed.
@@ -34,7 +34,7 @@ type EtcdProxyControllerOptions struct {
 	// KubeconfigPath is used to obtain path to kubeconfig, used to create kubeclients.
 	KubeconfigPath string
 
-	// ProxyImage is name of the etcd image to be used for etcd-proxy ReplicaSet creation.
+	// ProxyImage is name of the etcd image to be used for etcd-proxy Deployments creation.
 	ProxyImage string
 }
 

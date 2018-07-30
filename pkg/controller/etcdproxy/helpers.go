@@ -12,26 +12,26 @@ import (
 	etcdstoragev1alpha1 "github.com/xmudrii/etcdproxy-controller/pkg/apis/etcd/v1alpha1"
 )
 
-// newReplicaSet creates a new Deployment for a EtcdStorage resource. It also sets
+// newDeployment creates a new Deployment for a EtcdStorage resource. It also sets
 // the appropriate OwnerReferences on the resource so handleObject can discover
 // the EtcdStorage resource that 'owns' it.
-func newReplicaSet(etcdstorage *etcdstoragev1alpha1.EtcdStorage,
+func newDeployment(etcdstorage *etcdstoragev1alpha1.EtcdStorage,
 	etcdControllerNamespace, etcdProxyNamespace, etcdProxyImage,
-	etcdCoreCAConfigMapName, etcdCoreCertSecretName string, etcdCoreURLs []string) *appsv1.ReplicaSet {
+	etcdCoreCAConfigMapName, etcdCoreCertSecretName string, etcdCoreURLs []string) *appsv1.Deployment {
 	labels := map[string]string{
 		"apiserver": etcdstorage.Name,
 	}
 	replicas := int32(1)
 
-	return &appsv1.ReplicaSet{
+	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      replicaSetName(etcdstorage),
+			Name:      deploymentName(etcdstorage),
 			Namespace: etcdControllerNamespace,
 			OwnerReferences: []metav1.OwnerReference{
 				*metav1.NewControllerRef(etcdstorage, etcdstoragev1alpha1.SchemeGroupVersion.WithKind("EtcdStorage")),
 			},
 		},
-		Spec: appsv1.ReplicaSetSpec{
+		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
@@ -189,12 +189,12 @@ func newSecret(etcdstorage *etcdstoragev1alpha1.EtcdStorage, secretName,
 	}
 }
 
-// replicaSetName calculates name to be used to create a ReplicaSet.
-func replicaSetName(etcdstorage *etcdstoragev1alpha1.EtcdStorage) string {
-	return fmt.Sprintf("etcd-rs-%s", etcdstorage.ObjectMeta.Name)
+// deploymentName calculates name to be used to create a Deployment.
+func deploymentName(etcdstorage *etcdstoragev1alpha1.EtcdStorage) string {
+	return fmt.Sprintf("etcd-%s", etcdstorage.ObjectMeta.Name)
 }
 
-// serviceName calculates name to be used to create a ReplicaSet.
+// serviceName calculates name to be used to create a Deployment.
 func serviceName(etcdstorage *etcdstoragev1alpha1.EtcdStorage) string {
 	return fmt.Sprintf("etcd-%s", etcdstorage.ObjectMeta.Name)
 }

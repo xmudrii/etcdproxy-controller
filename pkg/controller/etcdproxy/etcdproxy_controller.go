@@ -39,7 +39,7 @@ const (
 	// Terminating is used as part of the Event 'reason' when an EtcdStorage resource is being deleted (deletion
 	// timestamp is set).
 	Terminating = "Terminating"
-	// ResourceReclaimed is used as part of the Event 'reason' when a replicaset or service already exists
+	// ResourceReclaimed is used as part of the Event 'reason' when a Deployment or a Service already exists
 	// and EtcdStorage reclaims it.
 	ResourceReclaimed = "ResourceReclaimed"
 
@@ -50,7 +50,7 @@ const (
 	ErrUnknown = "ErrUnknown"
 
 	// ResourceReclaimedReason is the message used for Events when a resource
-	// fails to sync due to a ReplicaSet already existing
+	// fails to sync due to a Deployment already existing
 	ResourceReclaimedReason = "Resource %q already exists and is set to be managed by EtcdStorage"
 	// ResourceTerminatingReason is the message used for Events when a EtcdStorage is terminating.
 	MessageResourceTerminating = "EtcdStorage is being terminated"
@@ -68,8 +68,8 @@ type EtcdProxyController struct {
 	// etcdProxyClient is a clientset for our own API group
 	etcdProxyClient clientset.Interface
 
-	replicasetsLister appslisters.ReplicaSetLister
-	replicasetsSynced cache.InformerSynced
+	deploymentsLister appslisters.DeploymentLister
+	deploymentsSynced cache.InformerSynced
 
 	servicesLister corev1listers.ServiceLister
 	servicesSynced cache.InformerSynced
@@ -81,7 +81,7 @@ type EtcdProxyController struct {
 	// recorder is an event recorder for recording Event resources to the Kubernetes API.
 	recorder record.EventRecorder
 
-	// config is used to wire information used by controller to create ReplicaSets.
+	// config is used to wire information used by controller to create Deployments.
 	config *EtcdProxyControllerConfig
 }
 
@@ -89,7 +89,7 @@ type EtcdProxyController struct {
 func NewEtcdProxyController(
 	kubeclientset kubernetes.Interface,
 	etcdProxyClient clientset.Interface,
-	replicasetsInformer appsinformers.ReplicaSetInformer,
+	deploymentsInformer appsinformers.DeploymentInformer,
 	servicesInformer corev1informers.ServiceInformer,
 	etcdstorageInformer informers.EtcdStorageInformer,
 	config *EtcdProxyControllerConfig) *EtcdProxyController {
@@ -106,8 +106,8 @@ func NewEtcdProxyController(
 	controller := &EtcdProxyController{
 		kubeclientset:      kubeclientset,
 		etcdProxyClient:    etcdProxyClient,
-		replicasetsLister:  replicasetsInformer.Lister(),
-		replicasetsSynced:  replicasetsInformer.Informer().HasSynced,
+		deploymentsLister:  deploymentsInformer.Lister(),
+		deploymentsSynced:  deploymentsInformer.Informer().HasSynced,
 		servicesLister:     servicesInformer.Lister(),
 		servicesSynced:     servicesInformer.Informer().HasSynced,
 		etcdstoragesLister: etcdstorageInformer.Lister(),
@@ -126,20 +126,20 @@ func NewEtcdProxyController(
 		},
 	})
 
-	// Set up an event handler for when ReplicaSet resources change. This
-	// handler will lookup the owner of the given ReplicaSet, and if it is
+	// Set up an event handler for when Deployment resources change. This
+	// handler will lookup the owner of the given Deployment, and if it is
 	// owned by a EtcdStorage resource will enqueue that EtcdStorage resource for
 	// processing. This way, we don't need to implement custom logic for
-	// handling ReplicaSet resources. More info on this pattern:
+	// handling Deployment resources. More info on this pattern:
 	// https://github.com/kubernetes/community/blob/8cafef897a22026d42f5e5bb3f104febe7e29830/contributors/devel/controllers.md
-	replicasetsInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+	deploymentsInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: controller.handleObject,
 		UpdateFunc: func(old, new interface{}) {
-			newRSet := new.(*appsv1.ReplicaSet)
-			oldRSet := old.(*appsv1.ReplicaSet)
+			newRSet := new.(*appsv1.Deployment)
+			oldRSet := old.(*appsv1.Deployment)
 			if newRSet.ResourceVersion == oldRSet.ResourceVersion {
-				// Periodic resync will send update events for all known ReplicaSets.
-				// Two different versions of the same ReplicaSet will always have different RVs.
+				// Periodic resync will send update events for all known Deployments.
+				// Two different versions of the same Deployments will always have different RVs.
 				return
 			}
 			controller.handleObject(new)
@@ -178,7 +178,7 @@ func (c *EtcdProxyController) Run(threadiness int, stopCh <-chan struct{}) error
 
 	// Wait for the caches to be synced before starting workers
 	glog.Info("Waiting for informer caches to sync")
-	if ok := cache.WaitForCacheSync(stopCh, c.replicasetsSynced, c.servicesSynced, c.etcdstoragesSynced); !ok {
+	if ok := cache.WaitForCacheSync(stopCh, c.deploymentsSynced, c.servicesSynced, c.etcdstoragesSynced); !ok {
 		return fmt.Errorf("failed to wait for caches to sync")
 	}
 
@@ -281,7 +281,7 @@ func (c *EtcdProxyController) syncHandler(key string) error {
 	}
 
 	// This prevents syncHandler to continue in case an EtcdStorage resource is being deleted.
-	// Otherwise, the controller ends up in the ReplicaSet recreation loop until GC doesn't
+	// Otherwise, the controller ends up in the Deployment recreation loop until GC doesn't
 	// delete the EtcdStorage resource.
 	if !etcdstorage.DeletionTimestamp.IsZero() {
 		glog.V(2).Infof("EtcdStorage %s is being terminated.", etcdstorage.Name)
@@ -300,10 +300,10 @@ func (c *EtcdProxyController) syncHandler(key string) error {
 		return utilerrors.NewAggregate(errs)
 	}
 
-	// Etcd proxy ReplicaSet.
-	replicaset, err := c.replicasetsLister.ReplicaSets(c.config.ControllerNamespace).Get(replicaSetName(etcdstorage))
+	// Etcd proxy Deployment.
+	deployment, err := c.deploymentsLister.Deployments(c.config.ControllerNamespace).Get(deploymentName(etcdstorage))
 	if errors.IsNotFound(err) {
-		replicaset, err = c.kubeclientset.AppsV1().ReplicaSets(c.config.ControllerNamespace).Create(newReplicaSet(
+		deployment, err = c.kubeclientset.AppsV1().Deployments(c.config.ControllerNamespace).Create(newDeployment(
 			etcdstorage, c.config.ControllerNamespace, etcdstorage.Name,
 			c.config.ProxyImage, c.config.CoreEtcd.CAConfigMapName, c.config.CoreEtcd.CertSecretName,
 			c.config.CoreEtcd.URLs))
@@ -317,19 +317,19 @@ func (c *EtcdProxyController) syncHandler(key string) error {
 		return err
 	}
 
-	// If the ReplicaSet is not controlled by this EtcdStorage resource, we should log
+	// If the Deployment is not controlled by this EtcdStorage resource, we should log
 	// a warning to the event recorder and ret
-	if !metav1.IsControlledBy(replicaset, etcdstorage) {
-		replicaset.SetOwnerReferences([]metav1.OwnerReference{
+	if !metav1.IsControlledBy(deployment, etcdstorage) {
+		deployment.SetOwnerReferences([]metav1.OwnerReference{
 			*metav1.NewControllerRef(etcdstorage, etcdstoragev1alpha1.SchemeGroupVersion.WithKind("EtcdStorage")),
 		})
-		replicaset, err = c.kubeclientset.AppsV1().ReplicaSets(c.config.ControllerNamespace).Update(replicaset)
+		deployment, err = c.kubeclientset.AppsV1().Deployments(c.config.ControllerNamespace).Update(deployment)
 		if err != nil {
-			msg := fmt.Sprintf(MessageErrResourceReclaimed, replicaset.Name)
+			msg := fmt.Sprintf(MessageErrResourceReclaimed, deployment.Name)
 			c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrResourceReclaimed, msg)
 			return err
 		}
-		msg := fmt.Sprintf(ResourceReclaimedReason, replicaset.Name)
+		msg := fmt.Sprintf(ResourceReclaimedReason, deployment.Name)
 		c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ResourceReclaimed, msg)
 	}
 
@@ -371,7 +371,7 @@ func (c *EtcdProxyController) syncHandler(key string) error {
 		Type:    etcdstoragev1alpha1.Deployed,
 		Status:  etcdstoragev1alpha1.ConditionTrue,
 		Reason:  "EtcdProxyDeployed",
-		Message: "etcdproxy replicaset and service created",
+		Message: "etcdproxy deployment and service created",
 	}
 	_, err = c.updateEtcdStorageStatus(etcdstorage, deployedCondition)
 	if err != nil {

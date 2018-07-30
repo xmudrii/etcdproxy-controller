@@ -33,7 +33,7 @@ rules:
   resources: ["etcdstorages/status"]
   verbs: ["update", "patch"]
 ---
-# Role for etcdproxy-controller-sa to manage ReplicaSets, Services, ConfigMap and Secrets.
+# Role for etcdproxy-controller-sa to manage Deployments, Services, ConfigMap and Secrets.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -41,7 +41,7 @@ metadata:
   namespace: kube-apiserver-storage
 rules:
 - apiGroups: ["apps"]
-  resources: ["replicasets"]
+  resources: ["deployments"]
   verbs: ["get", "watch", "list", "create", "update", "patch", "delete"]
 - apiGroups: [""]
   resources: ["services"]

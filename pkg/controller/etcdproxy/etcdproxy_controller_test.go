@@ -2,6 +2,7 @@ package etcdproxy
 
 import (
 	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/xmudrii/etcdproxy-controller/pkg/apis/etcd/v1alpha1"
@@ -11,13 +12,11 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
 
-	"reflect"
-
 	etcdclient "github.com/xmudrii/etcdproxy-controller/pkg/client/clientset/versioned/fake"
 	etcdlisters "github.com/xmudrii/etcdproxy-controller/pkg/client/listers/etcd/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kubeclient "k8s.io/client-go/kubernetes/fake"
-	rslisters "k8s.io/client-go/listers/apps/v1"
+	dslisters "k8s.io/client-go/listers/apps/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
 )
 
@@ -71,7 +70,7 @@ func TestSyncHandler(t *testing.T) {
 		startingConfigMap      *v1.ConfigMap
 		startingSecret         *v1.Secret
 		etcdProxyConfig        *EtcdProxyControllerConfig
-		expectedReplicaSetName string
+		expectedDeploymentName string
 		expectedServiceName    string
 	}{
 		{
@@ -88,7 +87,7 @@ func TestSyncHandler(t *testing.T) {
 				ControllerNamespace: "kube-apiserver-storage",
 				ProxyImage:          "quay.io/coreos/etcd:v3.2.18",
 			},
-			expectedReplicaSetName: "etcd-rs-test-1",
+			expectedDeploymentName: "etcd-test-1",
 			expectedServiceName:    "etcd-test-1",
 		},
 		{
@@ -105,7 +104,7 @@ func TestSyncHandler(t *testing.T) {
 				ControllerNamespace: "test-storage",
 				ProxyImage:          "quay.io/coreos/etcd:v3.2.18",
 			},
-			expectedReplicaSetName: "etcd-rs-test-2",
+			expectedDeploymentName: "etcd-test-2",
 			expectedServiceName:    "etcd-test-2",
 		},
 		{
@@ -120,7 +119,7 @@ func TestSyncHandler(t *testing.T) {
 				ControllerNamespace: "test-storage",
 				ProxyImage:          "quay.io/coreos/etcd:v3.2.18",
 			},
-			expectedReplicaSetName: "etcd-rs-test-3",
+			expectedDeploymentName: "etcd-test-3",
 			expectedServiceName:    "etcd-test-3",
 		},
 	}
@@ -151,7 +150,7 @@ func TestSyncHandler(t *testing.T) {
 				etcdstoragesLister: etcdlisters.NewEtcdStorageLister(indexer),
 
 				kubeclientset:     kubeClient,
-				replicasetsLister: rslisters.NewReplicaSetLister(indexer),
+				deploymentsLister: dslisters.NewDeploymentLister(indexer),
 				servicesLister:    corelisters.NewServiceLister(indexer),
 				recorder:          &record.FakeRecorder{},
 
@@ -162,10 +161,10 @@ func TestSyncHandler(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// Check is ReplicaSet created.
-			_, err = kubeClient.Apps().ReplicaSets(tc.etcdProxyConfig.ControllerNamespace).Get(tc.expectedReplicaSetName, metav1.GetOptions{})
+			// Check is Deployment created.
+			_, err = kubeClient.Apps().Deployments(tc.etcdProxyConfig.ControllerNamespace).Get(tc.expectedDeploymentName, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
-				t.Fatalf("replicaset not found: %v", err)
+				t.Fatalf("deployment not found: %v", err)
 			}
 			if err != nil {
 				t.Fatal(err)
@@ -305,7 +304,7 @@ func TestSyncHandlerFailure(t *testing.T) {
 				etcdstoragesLister: etcdlisters.NewEtcdStorageLister(indexer),
 
 				kubeclientset:     kubeClient,
-				replicasetsLister: rslisters.NewReplicaSetLister(indexer),
+				deploymentsLister: dslisters.NewDeploymentLister(indexer),
 				servicesLister:    corelisters.NewServiceLister(indexer),
 				recorder:          &record.FakeRecorder{},
 
