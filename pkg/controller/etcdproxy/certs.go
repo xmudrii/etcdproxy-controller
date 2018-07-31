@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 
@@ -16,6 +17,104 @@ import (
 
 // ProxyCertificateExpiryAnnotation is annotating are certificates successfully created and stored in the Secret or ConfigMap.
 const ProxyCertificateExpiryAnnotation = "etcd.xmudrii.com/certificate-generated"
+
+// appendClientCACert appends new CA certificate to the Client CA bundle located in the controller ConfigMap.
+func (c *EtcdProxyController) appendClientCACert(etcdstorage *etcdstoragev1alpha1.EtcdStorage, caCert *certs.Certificate) error {
+	caConfigMap, err := c.kubeclientset.CoreV1().ConfigMaps(c.config.ControllerNamespace).Get(etcdProxyCAConfigMapName(etcdstorage), metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		cert, _, err := caCert.GetPEMBytes()
+		if err != nil {
+			return err
+		}
+		return c.ensureClientCABundle(etcdstorage, cert, caCert.Certificates[0].NotAfter)
+	}
+	if err != nil {
+		return fmt.Errorf("error getting apiserver configmap: %v", err)
+	}
+
+	if _, ok := caConfigMap.Data["client-ca.crt"]; !ok {
+		cert, _, err := caCert.GetPEMBytes()
+		if err != nil {
+			return err
+		}
+		return c.ensureClientCABundle(etcdstorage, cert, caCert.Certificates[0].NotAfter)
+	}
+
+	crts, err := certs.ParseCertificateBytes([]byte(caConfigMap.Data["client-ca.crt"]), nil)
+	if err != nil {
+		return err
+	}
+	crts.Certificates = append(crts.Certificates, caCert.Certificates...)
+
+	clientCABundle, _, err := crts.GetPEMBytes()
+	if err != nil {
+		return err
+	}
+
+	err = c.ensureClientCABundle(etcdstorage, clientCABundle, caCert.Certificates[0].NotAfter)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// appendServingCACert appends new CA certificate to the Serving CA bundle located in the API Server ConfigMap.
+func (c *EtcdProxyController) appendServingCACert(etcdstorage *etcdstoragev1alpha1.EtcdStorage, caCert *certs.Certificate) error {
+	var errs []error
+	for _, cm := range etcdstorage.Spec.CACertConfigMaps {
+		caConfigMap, err := c.kubeclientset.CoreV1().ConfigMaps(cm.Namespace).Get(cm.Name, metav1.GetOptions{})
+		if errors.IsNotFound(err) {
+			cert, _, err := caCert.GetPEMBytes()
+			if err != nil {
+				errs = append(errs, err)
+				continue
+			}
+			err = c.ensureServingCABundle(etcdstorage, cm, cert, caCert.Certificates[0].NotAfter)
+			if err != nil {
+				errs = append(errs, err)
+			}
+			continue
+		}
+		if err != nil {
+			errs = append(errs, fmt.Errorf("error getting apiserver configmap: %v", err))
+			continue
+		}
+
+		if _, ok := caConfigMap.Data["serving-ca.crt"]; !ok {
+			cert, _, err := caCert.GetPEMBytes()
+			if err != nil {
+				errs = append(errs, err)
+				continue
+			}
+			err = c.ensureServingCABundle(etcdstorage, cm, cert, caCert.Certificates[0].NotAfter)
+			if err != nil {
+				errs = append(errs, err)
+			}
+			continue
+		}
+
+		crts, err := certs.ParseCertificateBytes([]byte(caConfigMap.Data["serving-ca.crt"]), nil)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		crts.Certificates = append(crts.Certificates, caCert.Certificates...)
+
+		servingCABundle, _, err := crts.GetPEMBytes()
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+
+		err = c.ensureServingCABundle(etcdstorage, cm, servingCABundle, caCert.Certificates[0].NotAfter)
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	return utilerrors.NewAggregate(errs)
+}
 
 // setNewEtcdProxyCertificates generates new self-signed server signer and server certificate/key pair.
 // Self-signed server signer cert is stored in APIServer ConfigMap to be used as CA by etcd, while server cert/key pair
@@ -117,6 +216,7 @@ func (c *EtcdProxyController) setNewAPIServerCertificates(etcdstorage *etcdstora
 
 // ensureClientCABundle ensures the ConfigMap contains the required Client CA bundle.
 // The Client CA bundle is located in the controller namespace and is used by the etcd-proxy to verify API server identity.
+// TODO: Once we implement validity check we will not need time here.
 func (c *EtcdProxyController) ensureClientCABundle(etcdstorage *etcdstoragev1alpha1.EtcdStorage, caBytes []byte, expiryDate time.Time) error {
 	configMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -140,6 +240,7 @@ func (c *EtcdProxyController) ensureClientCABundle(etcdstorage *etcdstoragev1alp
 
 // ensureServingCABundle ensures the ConfigMap contains the required Serving CA bundle.
 // The Serving CA bundle is located in the API server namespace and is used by the API server to verify etcd-proxy identity.
+// TODO: Once we implement validity check we will not need time here.
 func (c *EtcdProxyController) ensureServingCABundle(etcdstorage *etcdstoragev1alpha1.EtcdStorage, caDestination etcdstoragev1alpha1.CABundleDestination, caBytes []byte, expiryDate time.Time) error {
 	configMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
