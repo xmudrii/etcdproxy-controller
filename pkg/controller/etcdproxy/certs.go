@@ -6,9 +6,7 @@ import (
 	"math/rand"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/equality"
-	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 
@@ -16,8 +14,8 @@ import (
 	"github.com/xmudrii/etcdproxy-controller/pkg/certs"
 )
 
-// annCertificateGenerated is annotating are certificates successfully created and stored in the Secret or ConfigMap.
-const annCertificateGenerated = "etcd.xmudrii.com/certificate-generated"
+// ProxyCertificateExpiryAnnotation is annotating are certificates successfully created and stored in the Secret or ConfigMap.
+const ProxyCertificateExpiryAnnotation = "etcd.xmudrii.com/certificate-generated"
 
 // setNewEtcdProxyCertificates generates new self-signed server signer and server certificate/key pair.
 // Self-signed server signer cert is stored in APIServer ConfigMap to be used as CA by etcd, while server cert/key pair
@@ -52,11 +50,18 @@ func (c *EtcdProxyController) setNewEtcdProxyCertificates(etcdstorage *etcdstora
 	}
 
 	// Write pairs to appropriate ConfigMaps and Secrets.
-	err = c.updateAPIServerServingCAConfigMaps(etcdstorage, serverSignerCert)
-	if err != nil {
-		return err
+	var errs []error
+	for _, configMap := range etcdstorage.Spec.CACertConfigMaps {
+		err = c.ensureClientCABundle(etcdstorage, configMap, serverSignerCert, serverSigner.Certificates[0].NotAfter)
+		if err != nil {
+			errs = append(errs, err)
+		}
 	}
-	return c.createEtcdProxyServingCertSecret(etcdstorage, serverCertBytes, serverKeyBytes)
+	if len(errs) > 0 {
+		return utilerrors.NewAggregate(errs)
+	}
+
+	return c.ensureServerCert(etcdstorage, serverCertBytes, serverKeyBytes, serverBundle.Certificates[0].NotAfter)
 }
 
 // setNewAPIServerCertificates generates new self-signed client signer and client certificate/key pair.
@@ -81,7 +86,7 @@ func (c *EtcdProxyController) setNewAPIServerCertificates(etcdstorage *etcdstora
 	}
 
 	// Write CA certificate to EtcdProxyController CA ConfigMap.
-	err = c.createEtcdProxyClientCAConfigMap(etcdstorage, clientSignerCert)
+	err = c.ensureServingCABundle(etcdstorage, clientSignerCert, clientSigner.Certificates[0].NotAfter)
 
 	// Generate client certificate for each Secret provided.
 	var errs []error
@@ -101,7 +106,7 @@ func (c *EtcdProxyController) setNewAPIServerCertificates(etcdstorage *etcdstora
 		}
 
 		// Write certificate and key pair to the Secret.
-		err = c.updateAPIServerClientCertSecrets(etcdstorage, secret, clientCertBytes, clientKeyBytes)
+		err = c.ensureClientCert(etcdstorage, secret, clientCertBytes, clientKeyBytes, clientBundle.Certificates[0].NotAfter)
 		if err != nil {
 			errs = append(errs, err)
 		}
@@ -110,149 +115,90 @@ func (c *EtcdProxyController) setNewAPIServerCertificates(etcdstorage *etcdstora
 	return utilerrors.NewAggregate(errs)
 }
 
-// createEtcdProxyClientCAConfigMap creates ConfigMap in controller namespace with Etcd Proxy CA bundle
-// for verifying incoming client certificates.
-func (c EtcdProxyController) createEtcdProxyClientCAConfigMap(etcdstorage *etcdstoragev1alpha1.EtcdStorage,
-	clientSingerCert []byte) error {
-	// ConfigMap in controller namespace for the etcd proxy CA certificate.
-	_, err := c.kubeclientset.CoreV1().ConfigMaps(c.config.ControllerNamespace).
-		Get(etcdProxyCAConfigMapName(etcdstorage), metav1.GetOptions{})
-	if errors.IsNotFound(err) {
-		data := map[string]string{"client-ca.crt": string(clientSingerCert)}
-		_, err = c.kubeclientset.CoreV1().ConfigMaps(c.config.ControllerNamespace).
-			Create(newConfigMap(etcdstorage, etcdProxyCAConfigMapName(etcdstorage), c.config.ControllerNamespace, data))
-		if err != nil {
-			// TODO: refactor event handling (hint: see #40).
-			c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrUnknown, err.Error())
-			return err
-		}
-		return nil
+// ensureServingCABundle ensures the ConfigMap contains the required Serving CA bundle.
+// The Serving CA bundle is located in the controller namespace and is used by the etcd-proxy to verify API server identity.
+func (c *EtcdProxyController) ensureServingCABundle(etcdstorage *etcdstoragev1alpha1.EtcdStorage, caBytes []byte, expiryDate time.Time) error {
+	configMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      etcdProxyCAConfigMapName(etcdstorage),
+			Namespace: c.config.ControllerNamespace,
+			// TODO: Remove this once validation is in place.
+			Annotations: map[string]string{
+				ProxyCertificateExpiryAnnotation: expiryDate.Format(time.RFC3339),
+			},
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(etcdstorage, etcdstoragev1alpha1.SchemeGroupVersion.WithKind("EtcdStorage")),
+			},
+		},
+		Data: map[string]string{
+			"client-ca.crt": string(caBytes),
+		},
 	}
-	if err != nil {
-		// TODO: refactor event handling (hint: see #40).
-		c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrUnknown, err.Error())
-		return err
-	}
-	return nil
+
+	return ensureConfigMap(c.kubeclientset, configMap)
 }
 
-// createEtcdProxyServingCertSecret creates Secret in controller namespace with Etcd Proxy serving certificate and key.
-func (c EtcdProxyController) createEtcdProxyServingCertSecret(etcdstorage *etcdstoragev1alpha1.EtcdStorage,
-	serverCert, serverKey []byte) error {
-	// Secret for the etcd proxy server certs in controller namespace.
-	_, err := c.kubeclientset.CoreV1().Secrets(c.config.ControllerNamespace).
-		Get(etcdProxyServerCertsSecret(etcdstorage), metav1.GetOptions{})
-	if errors.IsNotFound(err) {
-		data := map[string][]byte{
-			"tls.crt": serverCert,
-			"tls.key": serverKey,
-		}
-		_, err = c.kubeclientset.CoreV1().Secrets(c.config.ControllerNamespace).
-			Create(newSecret(etcdstorage, etcdProxyServerCertsSecret(etcdstorage), c.config.ControllerNamespace, data))
-		if err != nil {
-			// TODO: refactor event handling (hint: see #40).
-			c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrUnknown, err.Error())
-			return err
-		}
-		return nil
+// ensureClientCABundle ensures the ConfigMap contains the required Client CA bundle.
+// The Client CA bundle is located in the API server namespace and is used by the API server to verify etcd-proxy identity.
+func (c *EtcdProxyController) ensureClientCABundle(etcdstorage *etcdstoragev1alpha1.EtcdStorage, caDestination etcdstoragev1alpha1.CABundleDestination, caBytes []byte, expiryDate time.Time) error {
+	configMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      caDestination.Name,
+			Namespace: caDestination.Namespace,
+			// TODO: Remove this once validation is in place.
+			Annotations: map[string]string{
+				ProxyCertificateExpiryAnnotation: expiryDate.Format(time.RFC3339),
+			},
+		},
+		Data: map[string]string{
+			"server-ca.crt": string(caBytes),
+		},
 	}
-	if err != nil {
-		// TODO: refactor event handling (hint: see #40).
-		c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrUnknown, err.Error())
-		return err
-	}
-	return nil
+
+	return ensureConfigMap(c.kubeclientset, configMap)
 }
 
-// updateAPIServerServingCAConfigMaps updates the ConfigMap in the aggregated API server namespace with the CA certificate.
-func (c *EtcdProxyController) updateAPIServerServingCAConfigMaps(etcdstorage *etcdstoragev1alpha1.EtcdStorage,
-	serverSignerCert []byte) error {
-	var errs []error
-	// Check are ConfigMap name and namespace provided.
-	for _, configMap := range etcdstorage.Spec.CACertConfigMaps {
-		caConfigMap, err := c.kubeclientset.CoreV1().ConfigMaps(configMap.Namespace).
-			Get(configMap.Name, metav1.GetOptions{})
-		if err != nil {
-			// TODO: refactor event handling (hint: see #40).
-			c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrUnknown, err.Error())
-			errs = append(errs, err)
-			continue
-		}
-
-		caConfigMapCopy := caConfigMap.DeepCopy()
-		if val, ok := caConfigMapCopy.Annotations[annCertificateGenerated]; ok {
-			if val == "true" {
-				continue
-			}
-		}
-
-		caConfigMapCopy.Data = map[string]string{"server-ca.crt": string(serverSignerCert)}
-
-		// TODO: extend annotations to include more information about certs, including expiry date, etc.
-		// HINT: take a look at openshift/service-serving-cert-signer for ideas.
-		caConfigMapCopy.Annotations = map[string]string{
-			annCertificateGenerated: "true",
-		}
-
-		// Check are ConfigMaps different and perform update if they are.
-		if !equality.Semantic.DeepEqual(caConfigMap, caConfigMapCopy) {
-			_, err = c.kubeclientset.CoreV1().ConfigMaps(caConfigMapCopy.Namespace).Update(caConfigMapCopy)
-			if err != nil {
-				// TODO: refactor event handling (hint: see #40).
-				c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrUnknown, err.Error())
-				errs = append(errs, err)
-			}
-		}
+// ensureServerCert ensures the Secret contains the required Server Certificate and Key.
+// The server certificate is used by etcd-proxy.
+func (c *EtcdProxyController) ensureServerCert(etcdstorage *etcdstoragev1alpha1.EtcdStorage, certBytes, keyBytes []byte, expiryDate time.Time) error {
+	secret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      etcdProxyServerCertsSecret(etcdstorage),
+			Namespace: c.config.ControllerNamespace,
+			Annotations: map[string]string{
+				ProxyCertificateExpiryAnnotation: expiryDate.Format(time.RFC3339),
+			},
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(etcdstorage, etcdstoragev1alpha1.SchemeGroupVersion.WithKind("EtcdStorage")),
+			},
+		},
+		Type: v1.SecretTypeTLS,
+		Data: map[string][]byte{
+			"tls.crt": certBytes,
+			"tls.key": keyBytes,
+		},
 	}
 
-	return utilerrors.NewAggregate(errs)
+	return ensureSecret(c.kubeclientset, secret)
 }
 
-// updateAPIServerClientCertSecrets updates the Secret in the aggregated API server namespace
-// with the client certificate and key.
-func (c *EtcdProxyController) updateAPIServerClientCertSecrets(etcdstorage *etcdstoragev1alpha1.EtcdStorage,
-	secret etcdstoragev1alpha1.ClientCertificateDestination, clientCert, clientKey []byte) error {
-	certSecret, err := c.kubeclientset.CoreV1().Secrets(secret.Namespace).Get(secret.Name, metav1.GetOptions{})
-	if err != nil {
-		// TODO: refactor event handling (hint: see #40).
-		c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrUnknown, err.Error())
-		return err
+// ensureClientCert ensures the Secret contains the required Client Certificate and Key.
+// The client certificate is used by the API server to authenticate with etcd-proxy.
+func (c *EtcdProxyController) ensureClientCert(etcdstorage *etcdstoragev1alpha1.EtcdStorage, certDestination etcdstoragev1alpha1.ClientCertificateDestination, certBytes, keyBytes []byte, expiryDate time.Time) error {
+	secret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      certDestination.Name,
+			Namespace: certDestination.Namespace,
+			Annotations: map[string]string{
+				ProxyCertificateExpiryAnnotation: expiryDate.Format(time.RFC3339),
+			},
+		},
+		Type: v1.SecretTypeTLS,
+		Data: map[string][]byte{
+			"tls.crt": certBytes,
+			"tls.key": keyBytes,
+		},
 	}
 
-	certSecretCopy := certSecret.DeepCopy()
-
-	if certSecretCopy.Type != corev1.SecretTypeTLS {
-		err = fmt.Errorf("certificates secret must be type of kubernetes.io/tls")
-		// TODO: refactor event handling (hint: see #40).
-		c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrUnknown, err.Error())
-		return err
-	}
-	if val, ok := certSecretCopy.Annotations[annCertificateGenerated]; ok {
-		if val == "true" {
-			return nil
-		}
-	}
-
-	certSecretCopy.Data = map[string][]byte{
-		"tls.crt": clientCert,
-		"tls.key": clientKey,
-	}
-
-	// TODO: extend annotations to include more information about certs, including expiry date, etc.
-	// HINT: take a look at openshift/service-serving-cert-signer for ideas.
-	certSecretCopy.Annotations = map[string]string{
-		annCertificateGenerated: "true",
-	}
-
-	// Check are Secrets different and perform update if they are.
-	if !equality.Semantic.DeepEqual(certSecret, certSecretCopy) {
-		_, err = c.kubeclientset.CoreV1().Secrets(certSecretCopy.Namespace).Update(certSecretCopy)
-		if err != nil {
-			// TODO: refactor event handling (hint: see #40).
-			c.recorder.Event(etcdstorage, corev1.EventTypeWarning, ErrUnknown, err.Error())
-			return err
-		}
-	}
-
-	return nil
+	return ensureSecret(c.kubeclientset, secret)
 }
