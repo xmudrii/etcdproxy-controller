@@ -53,7 +53,7 @@ func TestDeployEtcdStorage(t *testing.T) {
 				},
 			},
 			expectedDeploymentName: "etcd-es-test-1",
-			expectedReplicas:       int32(1),
+			expectedReplicas:       int32(3),
 			expectedServiceName:    "etcd-es-test-1",
 		},
 		{
@@ -68,7 +68,7 @@ func TestDeployEtcdStorage(t *testing.T) {
 				},
 			},
 			expectedDeploymentName: "etcd-es-test-2",
-			expectedReplicas:       int32(1),
+			expectedReplicas:       int32(3),
 			expectedServiceName:    "etcd-es-test-2",
 		},
 	}
