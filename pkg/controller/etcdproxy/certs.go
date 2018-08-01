@@ -52,7 +52,7 @@ func (c *EtcdProxyController) setNewEtcdProxyCertificates(etcdstorage *etcdstora
 	// Write pairs to appropriate ConfigMaps and Secrets.
 	var errs []error
 	for _, configMap := range etcdstorage.Spec.CACertConfigMaps {
-		err = c.ensureClientCABundle(etcdstorage, configMap, serverSignerCert, serverSigner.Certificates[0].NotAfter)
+		err = c.ensureServingCABundle(etcdstorage, configMap, serverSignerCert, serverSigner.Certificates[0].NotAfter)
 		if err != nil {
 			errs = append(errs, err)
 		}
@@ -86,7 +86,7 @@ func (c *EtcdProxyController) setNewAPIServerCertificates(etcdstorage *etcdstora
 	}
 
 	// Write CA certificate to EtcdProxyController CA ConfigMap.
-	err = c.ensureServingCABundle(etcdstorage, clientSignerCert, clientSigner.Certificates[0].NotAfter)
+	err = c.ensureClientCABundle(etcdstorage, clientSignerCert, clientSigner.Certificates[0].NotAfter)
 
 	// Generate client certificate for each Secret provided.
 	var errs []error
@@ -115,9 +115,9 @@ func (c *EtcdProxyController) setNewAPIServerCertificates(etcdstorage *etcdstora
 	return utilerrors.NewAggregate(errs)
 }
 
-// ensureServingCABundle ensures the ConfigMap contains the required Serving CA bundle.
-// The Serving CA bundle is located in the controller namespace and is used by the etcd-proxy to verify API server identity.
-func (c *EtcdProxyController) ensureServingCABundle(etcdstorage *etcdstoragev1alpha1.EtcdStorage, caBytes []byte, expiryDate time.Time) error {
+// ensureClientCABundle ensures the ConfigMap contains the required Client CA bundle.
+// The Client CA bundle is located in the controller namespace and is used by the etcd-proxy to verify API server identity.
+func (c *EtcdProxyController) ensureClientCABundle(etcdstorage *etcdstoragev1alpha1.EtcdStorage, caBytes []byte, expiryDate time.Time) error {
 	configMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      etcdProxyCAConfigMapName(etcdstorage),
@@ -131,16 +131,16 @@ func (c *EtcdProxyController) ensureServingCABundle(etcdstorage *etcdstoragev1al
 			},
 		},
 		Data: map[string]string{
-			"serving-ca.crt": string(caBytes),
+			"client-ca.crt": string(caBytes),
 		},
 	}
 
 	return ensureConfigMap(c.kubeclientset, configMap)
 }
 
-// ensureClientCABundle ensures the ConfigMap contains the required Client CA bundle.
-// The Client CA bundle is located in the API server namespace and is used by the API server to verify etcd-proxy identity.
-func (c *EtcdProxyController) ensureClientCABundle(etcdstorage *etcdstoragev1alpha1.EtcdStorage, caDestination etcdstoragev1alpha1.CABundleDestination, caBytes []byte, expiryDate time.Time) error {
+// ensureServingCABundle ensures the ConfigMap contains the required Serving CA bundle.
+// The Serving CA bundle is located in the API server namespace and is used by the API server to verify etcd-proxy identity.
+func (c *EtcdProxyController) ensureServingCABundle(etcdstorage *etcdstoragev1alpha1.EtcdStorage, caDestination etcdstoragev1alpha1.CABundleDestination, caBytes []byte, expiryDate time.Time) error {
 	configMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      caDestination.Name,
@@ -151,7 +151,7 @@ func (c *EtcdProxyController) ensureClientCABundle(etcdstorage *etcdstoragev1alp
 			},
 		},
 		Data: map[string]string{
-			"client-ca.crt": string(caBytes),
+			"serving-ca.crt": string(caBytes),
 		},
 	}
 
