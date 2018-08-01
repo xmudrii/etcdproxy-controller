@@ -131,7 +131,7 @@ func (c *EtcdProxyController) ensureServingCABundle(etcdstorage *etcdstoragev1al
 			},
 		},
 		Data: map[string]string{
-			"client-ca.crt": string(caBytes),
+			"serving-ca.crt": string(caBytes),
 		},
 	}
 
@@ -151,7 +151,7 @@ func (c *EtcdProxyController) ensureClientCABundle(etcdstorage *etcdstoragev1alp
 			},
 		},
 		Data: map[string]string{
-			"server-ca.crt": string(caBytes),
+			"client-ca.crt": string(caBytes),
 		},
 	}
 
