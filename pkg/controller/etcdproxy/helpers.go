@@ -6,8 +6,11 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/kubernetes"
 
 	etcdstoragev1alpha1 "github.com/xmudrii/etcdproxy-controller/pkg/apis/etcd/v1alpha1"
 )
@@ -158,37 +161,6 @@ func newService(etcdstorage *etcdstoragev1alpha1.EtcdStorage, etcdControllerName
 	}
 }
 
-// newConfigMap creates a ConfigMap in a namespace specified as an argument, with OwnerRef set to the EtcdStorage object.
-func newConfigMap(etcdstorage *etcdstoragev1alpha1.EtcdStorage, configMapName,
-	configMapNamespace string, data map[string]string) *corev1.ConfigMap {
-	return &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      configMapName,
-			Namespace: configMapNamespace,
-			OwnerReferences: []metav1.OwnerReference{
-				*metav1.NewControllerRef(etcdstorage, etcdstoragev1alpha1.SchemeGroupVersion.WithKind("EtcdStorage")),
-			},
-		},
-		Data: data,
-	}
-}
-
-// newSecret creates a Secret in a namespace specified as an argument, with OwnerRef set to the EtcdStorage object.
-func newSecret(etcdstorage *etcdstoragev1alpha1.EtcdStorage, secretName,
-	secretNamespace string, data map[string][]byte) *corev1.Secret {
-	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      secretName,
-			Namespace: secretNamespace,
-			OwnerReferences: []metav1.OwnerReference{
-				*metav1.NewControllerRef(etcdstorage, etcdstoragev1alpha1.SchemeGroupVersion.WithKind("EtcdStorage")),
-			},
-		},
-		Type: corev1.SecretTypeTLS,
-		Data: data,
-	}
-}
-
 // deploymentName calculates name to be used to create a Deployment.
 func deploymentName(etcdstorage *etcdstoragev1alpha1.EtcdStorage) string {
 	return fmt.Sprintf("etcd-%s", etcdstorage.ObjectMeta.Name)
@@ -212,4 +184,75 @@ func etcdProxyServerCertsSecret(etcdstorage *etcdstoragev1alpha1.EtcdStorage) st
 // flagfromString returns double dash prefixed flag calculated from provided key and value.
 func flagfromString(key, value string) string {
 	return fmt.Sprintf("--%s=%s", key, value)
+}
+
+// ensureConfigMap ensures provided ConfigMap exists as it is provided. If ConfigMap is not found, it will be created.
+func ensureConfigMap(kubeclientset kubernetes.Interface, required *corev1.ConfigMap) error {
+	existing, err := kubeclientset.CoreV1().ConfigMaps(required.Namespace).Get(required.Name, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		_, err = kubeclientset.CoreV1().ConfigMaps(required.Namespace).Create(required)
+		return err
+	}
+	if err != nil {
+		return err
+	}
+
+	// TODO: Anti-update hack. There is no appending in place, it will just override existing certificates. Appending will be added in #60.
+	if _, ok := existing.Annotations[ProxyCertificateExpiryAnnotation]; ok {
+		return nil
+	}
+
+	modified := false
+	mergeStringMap(&modified, &existing.ObjectMeta.Annotations, required.ObjectMeta.Annotations)
+	mergeStringMap(&modified, &existing.ObjectMeta.Labels, required.ObjectMeta.Labels)
+	if equality.Semantic.DeepEqual(required.Data, existing.Data) && !modified {
+		return nil
+	}
+
+	existing.Data = required.Data
+	_, err = kubeclientset.CoreV1().ConfigMaps(existing.Namespace).Update(existing)
+
+	return err
+}
+
+// ensureSecret ensures provided Secret exists as it is provided. If Secret is not found, it will be created.
+func ensureSecret(kubeclientset kubernetes.Interface, required *corev1.Secret) error {
+	existing, err := kubeclientset.CoreV1().Secrets(required.Namespace).Get(required.Name, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		_, err = kubeclientset.CoreV1().Secrets(required.Namespace).Create(required)
+		return err
+	}
+	if err != nil {
+		return err
+	}
+
+	// TODO: Anti-update hack. There is no appending in place, it will just override existing certificates. Appending will be added in #60.
+	if _, ok := existing.Annotations[ProxyCertificateExpiryAnnotation]; ok {
+		return nil
+	}
+
+	modified := false
+	mergeStringMap(&modified, &existing.ObjectMeta.Annotations, required.ObjectMeta.Annotations)
+	mergeStringMap(&modified, &existing.ObjectMeta.Labels, required.ObjectMeta.Labels)
+	if equality.Semantic.DeepEqual(required.Data, existing.Data) && !modified {
+		return nil
+	}
+
+	existing.Data = required.Data
+	_, err = kubeclientset.CoreV1().Secrets(existing.Namespace).Update(existing)
+
+	return err
+}
+
+func mergeStringMap(modified *bool, destination *map[string]string, required map[string]string) {
+	if *destination == nil {
+		*destination = map[string]string{}
+	}
+
+	for k, v := range required {
+		if destinationV, ok := (*destination)[k]; !ok || destinationV != v {
+			(*destination)[k] = v
+			*modified = true
+		}
+	}
 }
