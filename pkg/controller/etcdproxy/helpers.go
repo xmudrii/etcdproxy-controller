@@ -24,7 +24,7 @@ func newDeployment(etcdstorage *etcdstoragev1alpha1.EtcdStorage,
 	labels := map[string]string{
 		"apiserver": etcdstorage.Name,
 	}
-	replicas := int32(1)
+	replicas := int32(3)
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -88,6 +88,22 @@ func newDeployment(etcdstorage *etcdstoragev1alpha1.EtcdStorage,
 									MountPath: "/etc/etcdproxy-certs/server",
 									ReadOnly:  true,
 								},
+							},
+							LivenessProbe: &corev1.Probe{
+								Handler: corev1.Handler{
+									Exec: &corev1.ExecAction{
+										Command: []string{
+											"/bin/sh",
+											"-ec",
+											"ETCDCTL_API=3 etcdctl get foo",
+										},
+									},
+								},
+								InitialDelaySeconds: 10,
+								PeriodSeconds:       30,
+								SuccessThreshold:    1,
+								FailureThreshold:    3,
+								TimeoutSeconds:      10,
 							},
 						},
 					},
