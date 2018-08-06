@@ -290,10 +290,10 @@ func (c *EtcdProxyController) syncHandler(key string) error {
 
 	// Deploy Server Etcd Proxy certificates.
 	var errs []error
-	if err = c.setNewEtcdProxyCertificates(etcdstorage); err != nil {
+	if err = c.ensureClientCertificates(etcdstorage); err != nil {
 		errs = append(errs, err)
 	}
-	if err = c.setNewAPIServerCertificates(etcdstorage); err != nil {
+	if err = c.ensureServerCertificates(etcdstorage); err != nil {
 		errs = append(errs, err)
 	}
 	if len(errs) > 0 {
