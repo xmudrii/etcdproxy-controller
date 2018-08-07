@@ -56,21 +56,6 @@ func TestDeployEtcdStorage(t *testing.T) {
 			expectedReplicas:       int32(3),
 			expectedServiceName:    "etcd-es-test-1",
 		},
-		{
-			name: "test etcdstorage creation without apiserver certs",
-			etcdStorage: &v1alpha1.EtcdStorage{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "es-test-2",
-				},
-				Spec: v1alpha1.EtdcStorageSpec{
-					CACertConfigMaps:  []v1alpha1.CABundleDestination{},
-					ClientCertSecrets: []v1alpha1.ClientCertificateDestination{},
-				},
-			},
-			expectedDeploymentName: "etcd-es-test-2",
-			expectedReplicas:       int32(3),
-			expectedServiceName:    "etcd-es-test-2",
-		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
