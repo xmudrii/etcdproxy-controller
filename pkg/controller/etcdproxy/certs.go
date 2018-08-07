@@ -31,12 +31,22 @@ const ProxyCertificateExpiryAnnotation = "etcd.xmudrii.com/certificate-expiry-da
 // * Generates new Client certificate/key pair using the newly generated CA certificate and updates the appropriate Secret with new pair.
 // Problem: the API server have to be "restarted" manually to pick up changes. Hopefully, this to be fixed in future Kube versions.
 func (c *EtcdProxyController) ensureClientCertificates(etcdstorage *etcdstoragev1alpha1.EtcdStorage) error {
-	var clientCA *certs.Certificate
+	var signingCertKeyPair *certs.Certificate
 	var errs []error
 	// TODO: Huh, clientCertSecret and secretClientCert sounds way too similar.
 	for _, clientCertSecret := range etcdstorage.Spec.ClientCertSecrets {
-		secret, err := c.getClientCertsSecret(etcdstorage, clientCertSecret)
-		if err != nil {
+		secret, err := c.kubeclientset.CoreV1().Secrets(clientCertSecret.Namespace).Get(clientCertSecret.Name, metav1.GetOptions{})
+		if errors.IsNotFound(err) {
+			secret = &v1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        clientCertSecret.Name,
+					Namespace:   clientCertSecret.Namespace,
+					Annotations: map[string]string{},
+				},
+				Type: v1.SecretTypeTLS,
+				Data: map[string][]byte{},
+			}
+		} else if err != nil {
 			errs = append(errs, err)
 			continue
 		}
@@ -59,32 +69,41 @@ func (c *EtcdProxyController) ensureClientCertificates(etcdstorage *etcdstoragev
 		// We're generating one Client CA in this loop for all Client certificates that are going to be regenerated in this loop/iteration.
 		// TODO: Decide is this a good idea. Another idea is to genearte new CA certificate for each Client certificate that has to be regenrated.
 		// TODO: The negative side in this case is that we could have to restart etcd-proxy for each certificate appended and to get/update for each one instead of once.
-		if clientCA == nil {
+		if signingCertKeyPair == nil {
 			// Generate new Client CA certificate.
-			clientCA, err = c.generateClientCACertificate(etcdstorage)
+			signingCertKeyPair, err = c.generateClientSigningCertKeyPair(etcdstorage)
 			if err != nil {
 				errs = append(errs, err)
 				continue
 			}
 			// Get Client CA ConfigMap and check does it contain CA bundle. If yes, append new client CA certificate to the bundle.
-			clientCAConfigMap, err := c.getClientCABundleConfigMap(etcdstorage)
-			if err != nil {
+			clientCAConfigMap, err := c.kubeclientset.CoreV1().ConfigMaps(c.config.ControllerNamespace).Get(etcdProxyCAConfigMapName(etcdstorage), metav1.GetOptions{})
+			if errors.IsNotFound(err) {
+				clientCAConfigMap = &v1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:        etcdProxyCAConfigMapName(etcdstorage),
+						Namespace:   c.config.ControllerNamespace,
+						Annotations: map[string]string{},
+					},
+					Data: map[string]string{},
+				}
+			} else if err != nil {
 				errs = append(errs, err)
-				continue
 			}
+
 			if clientCABytes, ok := clientCAConfigMap.Data["client-ca.crt"]; ok {
 				oldClientCA, err := certs.ParseCertificateBytes([]byte(clientCABytes), nil)
 				if err != nil {
 					errs = append(errs, err)
 					continue
 				}
-				clientCA.Certificates = append(clientCA.Certificates, oldClientCA.Certificates...)
+				signingCertKeyPair.Certificates = append(signingCertKeyPair.Certificates, oldClientCA.Certificates...)
 			}
 			// Filter expired certificates in the Client CA bundle.
-			clientCA.Certificates = certs.FilterExpiredCerts(clientCA.Certificates...)
+			signingCertKeyPair.Certificates = certs.FilterExpiredCerts(signingCertKeyPair.Certificates...)
 
 			// Update ConfigMap with the updated Client CA bundle. If ConfigMap doesn't exist, it will be created.
-			clientCABytes, _, err := clientCA.GetPEMBytes()
+			clientCABytes, _, err := signingCertKeyPair.GetPEMBytes()
 			if err != nil {
 				return err
 			}
@@ -101,7 +120,7 @@ func (c *EtcdProxyController) ensureClientCertificates(etcdstorage *etcdstoragev
 
 		// Generate new Client certificate/key pair using the newly-generated Client CA certificate and update
 		// the appropriate Secret.
-		clientCert, err := c.generateClientCertificate(etcdstorage, clientCA, clientCertSecret)
+		clientCert, err := c.generateClientCertificate(etcdstorage, signingCertKeyPair, clientCertSecret)
 		if err != nil {
 			errs = append(errs, err)
 			continue
@@ -142,8 +161,18 @@ func (c *EtcdProxyController) ensureClientCertificates(etcdstorage *etcdstoragev
 // * "Restarts" etcd-proxy to pick-up new changes.
 // TODO: Implement "restarting" etcd-proxy. This is going to be done using rolling updates.
 func (c *EtcdProxyController) ensureServerCertificates(etcdstorage *etcdstoragev1alpha1.EtcdStorage) error {
-	serverSecret, err := c.getSeverCertSecret(etcdstorage)
-	if err != nil {
+	serverSecret, err := c.kubeclientset.CoreV1().Secrets(c.config.ControllerNamespace).Get(etcdProxyServerCertsSecret(etcdstorage), metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		serverSecret = &v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        etcdProxyServerCertsSecret(etcdstorage),
+				Namespace:   c.config.ControllerNamespace,
+				Annotations: map[string]string{},
+			},
+			Type: v1.SecretTypeTLS,
+			Data: map[string][]byte{},
+		}
+	} else if err != nil {
 		return err
 	}
 
@@ -187,10 +216,20 @@ func (c *EtcdProxyController) ensureServerCertificates(etcdstorage *etcdstoragev
 	for _, cm := range etcdstorage.Spec.CACertConfigMaps {
 		// Get CA bundle from the ConfigMap, check does it already have certificates in the bundle, append new one to it,
 		// and filter expired certificates.
-		configMap, err := c.getServingCABundleConfigMap(etcdstorage, cm)
-		if err != nil {
+		configMap, err := c.kubeclientset.CoreV1().ConfigMaps(cm.Namespace).Get(cm.Name, metav1.GetOptions{})
+		if errors.IsNotFound(err) {
+			configMap = &v1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        cm.Name,
+					Namespace:   cm.Namespace,
+					Annotations: map[string]string{},
+				},
+				Data: map[string]string{},
+			}
+		} else if err != nil {
 			return err
 		}
+
 		var ca *certs.Certificate
 		if oldCABytes, ok := configMap.Data["serving-ca.crt"]; ok {
 			ca, err = certs.ParseCertificateBytes([]byte(oldCABytes), nil)
@@ -229,7 +268,7 @@ func (c *EtcdProxyController) ensureServerCertificates(etcdstorage *etcdstoragev
 
 // TODO: Potentially, we don't need that many helpers. Maybe moving some of them to helpers.go is good idea as well.
 // generateClientBundle generates new etcd-proxy Client CA bundle.
-func (c *EtcdProxyController) generateClientCACertificate(etcdstorage *etcdstoragev1alpha1.EtcdStorage) (*certs.Certificate, error) {
+func (c *EtcdProxyController) generateClientSigningCertKeyPair(etcdstorage *etcdstoragev1alpha1.EtcdStorage) (*certs.Certificate, error) {
 	currentTime := time.Now
 	r := rand.New(rand.NewSource(currentTime().UnixNano()))
 	serviceUrl := fmt.Sprintf("%s.%s.svc", serviceName(etcdstorage), c.config.ControllerNamespace)
@@ -271,86 +310,4 @@ func (c *EtcdProxyController) generateServerBundle(etcdstorage *etcdstoragev1alp
 	}
 
 	return servingCA, serverCerts, nil
-}
-
-// getClientCABundleConfigMap returns ConfigMap from Kube if it already exists, or returns empty ConfigMap to be populated.
-func (c *EtcdProxyController) getClientCABundleConfigMap(etcdstorage *etcdstoragev1alpha1.EtcdStorage) (*v1.ConfigMap, error) {
-	configMap, err := c.kubeclientset.CoreV1().ConfigMaps(c.config.ControllerNamespace).Get(etcdProxyCAConfigMapName(etcdstorage), metav1.GetOptions{})
-	if errors.IsNotFound(err) {
-		return &v1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        etcdProxyCAConfigMapName(etcdstorage),
-				Namespace:   c.config.ControllerNamespace,
-				Annotations: map[string]string{},
-			},
-			Data: map[string]string{},
-		}, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	return configMap, nil
-}
-
-// getServingCABundleConfigMap returns ConfigMap from Kube if it already exists, or returns empty ConfigMap to be populated.
-func (c *EtcdProxyController) getServingCABundleConfigMap(etcdstorage *etcdstoragev1alpha1.EtcdStorage, caDestination etcdstoragev1alpha1.CABundleDestination) (*v1.ConfigMap, error) {
-	configMap, err := c.kubeclientset.CoreV1().ConfigMaps(caDestination.Namespace).Get(caDestination.Name, metav1.GetOptions{})
-	if errors.IsNotFound(err) {
-		return &v1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        caDestination.Name,
-				Namespace:   caDestination.Namespace,
-				Annotations: map[string]string{},
-			},
-			Data: map[string]string{},
-		}, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	return configMap, nil
-}
-
-// getSeverCertSecret returns Secret from Kube if it already exists, or returns empty Secret to be populated.
-func (c *EtcdProxyController) getSeverCertSecret(etcdstorage *etcdstoragev1alpha1.EtcdStorage) (*v1.Secret, error) {
-	secret, err := c.kubeclientset.CoreV1().Secrets(c.config.ControllerNamespace).Get(etcdProxyServerCertsSecret(etcdstorage), metav1.GetOptions{})
-	if errors.IsNotFound(err) {
-		return &v1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        etcdProxyServerCertsSecret(etcdstorage),
-				Namespace:   c.config.ControllerNamespace,
-				Annotations: map[string]string{},
-			},
-			Type: v1.SecretTypeTLS,
-			Data: map[string][]byte{},
-		}, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	return secret, nil
-}
-
-// getClientCertsSecret returns Secret from Kube if it already exists, or returns empty Secret to be populated.
-func (c *EtcdProxyController) getClientCertsSecret(etcdstorage *etcdstoragev1alpha1.EtcdStorage, certDestination etcdstoragev1alpha1.ClientCertificateDestination) (*v1.Secret, error) {
-	secret, err := c.kubeclientset.CoreV1().Secrets(certDestination.Namespace).Get(certDestination.Name, metav1.GetOptions{})
-	if errors.IsNotFound(err) {
-		return &v1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        certDestination.Name,
-				Namespace:   certDestination.Namespace,
-				Annotations: map[string]string{},
-			},
-			Type: v1.SecretTypeTLS,
-			Data: map[string][]byte{},
-		}, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	return secret, nil
 }
