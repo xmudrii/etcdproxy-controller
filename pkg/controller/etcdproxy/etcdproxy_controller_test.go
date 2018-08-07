@@ -5,20 +5,61 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/xmudrii/etcdproxy-controller/pkg/apis/etcd/v1alpha1"
+	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/tools/record"
-
-	etcdclient "github.com/xmudrii/etcdproxy-controller/pkg/client/clientset/versioned/fake"
-	etcdlisters "github.com/xmudrii/etcdproxy-controller/pkg/client/listers/etcd/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	kubeclient "k8s.io/client-go/kubernetes/fake"
 	dslisters "k8s.io/client-go/listers/apps/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/record"
+
+	"github.com/xmudrii/etcdproxy-controller/pkg/apis/etcd/v1alpha1"
+	etcdclient "github.com/xmudrii/etcdproxy-controller/pkg/client/clientset/versioned/fake"
+	etcdlisters "github.com/xmudrii/etcdproxy-controller/pkg/client/listers/etcd/v1alpha1"
 )
+
+func newEtcdProxyControllerMock(config *EtcdProxyControllerConfig, startingObjects []runtime.Object) *EtcdProxyController {
+	dsIndexer := cache.NewIndexer(cache.DeletionHandlingMetaNamespaceKeyFunc, cache.Indexers{})
+	svcIndexer := cache.NewIndexer(cache.DeletionHandlingMetaNamespaceKeyFunc, cache.Indexers{})
+	esIndexer := cache.NewIndexer(cache.DeletionHandlingMetaNamespaceKeyFunc, cache.Indexers{})
+
+	var kubeObjs []runtime.Object
+	var esObjs []runtime.Object
+
+	for _, obj := range startingObjects {
+		switch obj.(type) {
+		case *v1.Service:
+			kubeObjs = append(kubeObjs, obj)
+			svcIndexer.Add(obj)
+		case *appsv1.Deployment:
+			kubeObjs = append(kubeObjs, obj)
+			dsIndexer.Add(obj)
+		case *v1alpha1.EtcdStorage:
+			esObjs = append(esObjs, obj)
+			esIndexer.Add(obj)
+		default:
+			kubeObjs = append(kubeObjs, obj)
+		}
+	}
+
+	kubeClient := kubeclient.NewSimpleClientset(kubeObjs...)
+	etcdstorageClient := etcdclient.NewSimpleClientset(esObjs...)
+
+	return &EtcdProxyController{
+		etcdProxyClient:    etcdstorageClient,
+		etcdstoragesLister: etcdlisters.NewEtcdStorageLister(esIndexer),
+
+		kubeclientset:     kubeClient,
+		deploymentsLister: dslisters.NewDeploymentLister(dsIndexer),
+		servicesLister:    corelisters.NewServiceLister(svcIndexer),
+		recorder:          &record.FakeRecorder{},
+
+		config: config,
+	}
+}
 
 func TestSyncHandler(t *testing.T) {
 	etcdStorage := func(name string) *v1alpha1.EtcdStorage {
@@ -126,43 +167,24 @@ func TestSyncHandler(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			indexer := cache.NewIndexer(cache.DeletionHandlingMetaNamespaceKeyFunc, cache.Indexers{})
-			etcdObjs := []runtime.Object{}
-			objs := []runtime.Object{}
-
+			testObjs := []runtime.Object{}
+			if tc.startingEtcdStorage != nil {
+				testObjs = append(testObjs, tc.startingEtcdStorage)
+			}
 			if tc.startingConfigMap != nil {
-				objs = append(objs, tc.startingConfigMap)
-				indexer.Add(tc.startingConfigMap)
+				testObjs = append(testObjs, tc.startingConfigMap)
 			}
 			if tc.startingSecret != nil {
-				objs = append(objs, tc.startingSecret)
-				indexer.Add(tc.startingSecret)
+				testObjs = append(testObjs, tc.startingSecret)
 			}
-
-			etcdObjs = append(etcdObjs, tc.startingEtcdStorage)
-			indexer.Add(tc.startingEtcdStorage)
-
-			etcdstorageClient := etcdclient.NewSimpleClientset(etcdObjs...)
-			kubeClient := kubeclient.NewSimpleClientset(objs...)
-
-			c := EtcdProxyController{
-				etcdProxyClient:    etcdstorageClient,
-				etcdstoragesLister: etcdlisters.NewEtcdStorageLister(indexer),
-
-				kubeclientset:     kubeClient,
-				deploymentsLister: dslisters.NewDeploymentLister(indexer),
-				servicesLister:    corelisters.NewServiceLister(indexer),
-				recorder:          &record.FakeRecorder{},
-
-				config: tc.etcdProxyConfig,
-			}
+			c := newEtcdProxyControllerMock(tc.etcdProxyConfig, testObjs)
 			err := c.syncHandler(tc.startingEtcdStorage.Name)
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			// Check is Deployment created.
-			_, err = kubeClient.Apps().Deployments(tc.etcdProxyConfig.ControllerNamespace).Get(tc.expectedDeploymentName, metav1.GetOptions{})
+			_, err = c.kubeclientset.Apps().Deployments(tc.etcdProxyConfig.ControllerNamespace).Get(tc.expectedDeploymentName, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
 				t.Fatalf("deployment not found: %v", err)
 			}
@@ -171,7 +193,7 @@ func TestSyncHandler(t *testing.T) {
 			}
 
 			// Check is Service created.
-			_, err = kubeClient.Core().Services(tc.etcdProxyConfig.ControllerNamespace).Get(tc.expectedServiceName, metav1.GetOptions{})
+			_, err = c.kubeclientset.Core().Services(tc.etcdProxyConfig.ControllerNamespace).Get(tc.expectedServiceName, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
 				t.Fatalf("service not found: %v", err)
 			}
@@ -280,36 +302,17 @@ func TestSyncHandlerFailure(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			indexer := cache.NewIndexer(cache.DeletionHandlingMetaNamespaceKeyFunc, cache.Indexers{})
-			etcdObjs := []runtime.Object{}
-			objs := []runtime.Object{}
-
+			testObjs := []runtime.Object{}
+			if tc.startingEtcdStorage != nil {
+				testObjs = append(testObjs, tc.startingEtcdStorage)
+			}
 			if tc.startingConfigMap != nil {
-				objs = append(objs, tc.startingConfigMap)
-				indexer.Add(tc.startingConfigMap)
+				testObjs = append(testObjs, tc.startingConfigMap)
 			}
 			if tc.startingSecret != nil {
-				objs = append(objs, tc.startingSecret)
-				indexer.Add(tc.startingSecret)
+				testObjs = append(testObjs, tc.startingSecret)
 			}
-
-			etcdObjs = append(etcdObjs, tc.startingEtcdStorage)
-			indexer.Add(tc.startingEtcdStorage)
-
-			etcdstorageClient := etcdclient.NewSimpleClientset(etcdObjs...)
-			kubeClient := kubeclient.NewSimpleClientset(objs...)
-
-			c := EtcdProxyController{
-				etcdProxyClient:    etcdstorageClient,
-				etcdstoragesLister: etcdlisters.NewEtcdStorageLister(indexer),
-
-				kubeclientset:     kubeClient,
-				deploymentsLister: dslisters.NewDeploymentLister(indexer),
-				servicesLister:    corelisters.NewServiceLister(indexer),
-				recorder:          &record.FakeRecorder{},
-
-				config: tc.etcdProxyConfig,
-			}
+			c := newEtcdProxyControllerMock(tc.etcdProxyConfig, testObjs)
 			errs := c.syncHandler(tc.startingEtcdStorage.Name)
 			if reflect.DeepEqual(errs, tc.expectedErrors) {
 				t.Fatalf("expected error(s): '%v',\nbut got error(s): '%v'", tc.expectedErrors, errs)
