@@ -57,3 +57,4 @@ roleRef:
   kind: Role
   name: etcdproxy-manage-certs
   apiGroup: rbac.authorization.k8s.io
+

@@ -325,7 +325,7 @@ func (c *EtcdProxyController) generateClientSigningCertKeyPair(etcdstorage *etcd
 	// Generate the Client CA bundle.
 	return certs.NewCACertificate(pkix.Name{
 		CommonName: fmt.Sprintf("%s-client-signer-%v", serviceUrl, time.Now().Unix()),
-	}, r.Int63n(100000), currentTime)
+	}, r.Int63n(100000), etcdstorage.Spec.SigningCertificateValidity, currentTime)
 }
 
 // generateClientBundle generates new etcd-proxy client certificate/key pair based on provided Client CA bundle.
@@ -334,7 +334,7 @@ func (c *EtcdProxyController) generateClientCertificate(etcdstorage *etcdstorage
 	r := rand.New(rand.NewSource(currentTime().UnixNano()))
 
 	return clientCABundle.NewClientCertificate(pkix.Name{CommonName: fmt.Sprintf("client-%s-%s", clientCertSecret.Namespace, clientCertSecret.Name)},
-		r.Int63n(100000), currentTime)
+		r.Int63n(100000), etcdstorage.Spec.ClientCertificateValidity, currentTime)
 }
 
 // generateServerBundle generates both Serving CA bundle and Server certificate/key pair.
@@ -346,7 +346,7 @@ func (c *EtcdProxyController) generateServerBundle(etcdstorage *etcdstoragev1alp
 	// Generate the Serving CA bundle.
 	servingCA, err := certs.NewCACertificate(pkix.Name{
 		CommonName: fmt.Sprintf("%s-server-signer-%v", serviceUrl, time.Now().Unix()),
-	}, r.Int63n(100000), currentTime)
+	}, r.Int63n(100000), etcdstorage.Spec.SigningCertificateValidity, currentTime)
 	if err != nil {
 		return nil, err
 	}
@@ -354,7 +354,7 @@ func (c *EtcdProxyController) generateServerBundle(etcdstorage *etcdstoragev1alp
 	// Generate server certificate/key pair.
 	serverCerts, err := servingCA.NewServerCertificate(pkix.Name{
 		CommonName: fmt.Sprintf("%s-serving-cert-%v", serviceUrl, time.Now().Unix()),
-	}, []string{serviceUrl}, r.Int63n(100000), currentTime)
+	}, []string{serviceUrl}, r.Int63n(100000), etcdstorage.Spec.ServingCertificateValidity, currentTime)
 	if err != nil {
 		return nil, err
 	}

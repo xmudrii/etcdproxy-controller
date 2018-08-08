@@ -5,10 +5,12 @@ import (
 	"io/ioutil"
 	"testing"
 	"time"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestValidateCertificates(t *testing.T) {
-	c, err := NewCACertificate(pkix.Name{CommonName: "test"}, int64(1), time.Now)
+	c, err := NewCACertificate(pkix.Name{CommonName: "test"}, int64(1), metav1.Duration{time.Hour * 24 * 60}, time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +38,7 @@ func TestValidateCertificatesExpired(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	newCert, err := NewCACertificate(pkix.Name{CommonName: "etcdproxy-tests"}, int64(1), time.Now)
+	newCert, err := NewCACertificate(pkix.Name{CommonName: "etcdproxy-tests"}, int64(1), metav1.Duration{time.Hour * 24 * 60}, time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -9,3 +9,7 @@ spec:
   clientCertSecret: # Client certificate for accessing etcdproxy. Stored in Secrets specified by namespace/name pairs below. Secrets along with RBAC rules allowing EtcdProxyController to access specified Secrets must exist prior to creating an ‘EtcdStorage’ instance.
   - name: etcd-client-cert
     namespace: k8s-sample-apiserver
+  signingCertificateValidity: 730h # defines for how long the signing certificate is valid.
+  servingCertificateValidity: 730h # defines for how long the serving certificate/key pair is valid.
+  clientCertificateValidity:  730h # defines for how long the client certificate/key pair is valid.
+

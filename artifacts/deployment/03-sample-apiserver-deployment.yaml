@@ -15,6 +15,9 @@ spec:
   clientCertSecret:
   - name: etcd-client-cert
     namespace: k8s-sample-apiserver
+  signingCertificateValidity: 730h
+  servingCertificateValidity: 730h
+  clientCertificateValidity: 730h
 ---
 # Deploys the sample-apiserver (https://github.com/kubernetes/sample-apiserver).
 # The Deployment uses the xmudrii/kube-sample-apiserver image.
@@ -70,3 +73,4 @@ spec:
     name: api
     namespace: k8s-sample-apiserver
   version: v1alpha1
+

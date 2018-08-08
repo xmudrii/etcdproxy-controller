@@ -59,6 +59,15 @@ type EtdcStorageSpec struct {
 	// ClientCertSecrets contains name and namespace of Secret where client certificate and key for etcdproxy pod
 	// is supposed to be deployed. Usually it is in aggregated API server namespace.
 	ClientCertSecrets []ClientCertificateDestination `json:"clientCertSecret"`
+
+	// SigningCertificateValidity is number of minutes for how long self-generated signing certificate is valid.
+	SigningCertificateValidity metav1.Duration `json:"signingCertificateValidity"`
+
+	// ServingCertificateValidity is number of minutes for how long serving certificate/key pair is valid.
+	ServingCertificateValidity metav1.Duration `json:"servingCertificateValidity"`
+
+	// ClientCertificateValidity is number of minutes for how long client certificate/key pair is valid.
+	ClientCertificateValidity metav1.Duration `json:"clientCertificateValidity"`
 }
 
 // EtcdStorageStatus is the status for a EtcdStorage resource
