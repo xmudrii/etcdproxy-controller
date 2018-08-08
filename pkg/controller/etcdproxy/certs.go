@@ -182,39 +182,67 @@ func (c *EtcdProxyController) ensureServerCertificates(etcdstorage *etcdstoragev
 		return err
 	}
 
+	var serverCert *certs.Certificate
 	// Check is annotation containing expiry date present and valid. If it is valid, we're skipping this iteration.
 	if expiry, ok := serverSecret.Annotations[ProxyCertificateExpiryAnnotation]; ok {
 		certExpiry, err := time.Parse(time.RFC3339, expiry)
 		if err != nil {
 			return err
 		}
-		if certExpiry.After(time.Now()) {
-			return nil
+		if certExpiry.Before(time.Now()) {
+			serverCert, err = c.generateServerBundle(etcdstorage)
+			if err != nil {
+				return err
+			}
+
+			// Write new Server certificate/key pair to the Secret in the controller namespace.
+			serverCertBytes, serverKeyBytes, err := serverCert.GetPEMBytes()
+			if err != nil {
+				return err
+			}
+
+			serverSecret.Annotations = map[string]string{
+				ProxyCertificateExpiryAnnotation: serverCert.Certificates[0].NotAfter.Format(time.RFC3339),
+			}
+			serverSecret.Data = map[string][]byte{
+				"tls.crt": serverCertBytes,
+				"tls.key": serverKeyBytes,
+			}
+			err = ensureSecret(c.kubeclientset, serverSecret)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
-	// Generate new Serving CA certificate and Server certificate/key pair.
-	servingCA, serverCert, err := c.generateServerBundle(etcdstorage)
-	if err != nil {
-		return err
-	}
+	if _, ok := serverSecret.Data["tls.crt"]; !ok {
+		serverCert, err = c.generateServerBundle(etcdstorage)
+		if err != nil {
+			return err
+		}
 
-	// Write new Server certificate/key pair to the Secret in the controller namespace.
-	serverCertBytes, serverKeyBytes, err := serverCert.GetPEMBytes()
-	if err != nil {
-		return err
-	}
+		// Write new Server certificate/key pair to the Secret in the controller namespace.
+		serverCertBytes, serverKeyBytes, err := serverCert.GetPEMBytes()
+		if err != nil {
+			return err
+		}
 
-	serverSecret.Annotations = map[string]string{
-		ProxyCertificateExpiryAnnotation: serverCert.Certificates[0].NotAfter.Format(time.RFC3339),
-	}
-	serverSecret.Data = map[string][]byte{
-		"tls.crt": serverCertBytes,
-		"tls.key": serverKeyBytes,
-	}
-	err = ensureSecret(c.kubeclientset, serverSecret)
-	if err != nil {
-		return err
+		serverSecret.Annotations = map[string]string{
+			ProxyCertificateExpiryAnnotation: serverCert.Certificates[0].NotAfter.Format(time.RFC3339),
+		}
+		serverSecret.Data = map[string][]byte{
+			"tls.crt": serverCertBytes,
+			"tls.key": serverKeyBytes,
+		}
+		err = ensureSecret(c.kubeclientset, serverSecret)
+		if err != nil {
+			return err
+		}
+	} else if ok && serverCert == nil {
+		serverCert, err = certs.ParseCertificateBytes(serverSecret.Data["tls.crt"], serverSecret.Data["tls.key"])
+		if err != nil {
+			return err
+		}
 	}
 
 	// Append new Serving CA certificate to the bundle in all ConfigMaps defined by EtcdStorage Spec.
@@ -246,11 +274,11 @@ func (c *EtcdProxyController) ensureServerCertificates(etcdstorage *etcdstoragev
 				continue
 			}
 		}
-		// TODO: This is *very* ugly.
+		// TODO: This will duplicate. Unit test missing.
 		if ca != nil {
-			ca.Certificates = append(ca.Certificates, servingCA.Certificates...)
+			ca.Certificates = append(ca.Certificates, serverCert.Certificates...)
 		} else {
-			ca = servingCA
+			ca = serverCert
 		}
 		// Filter expired certificates in the Serving CA bundle.
 		ca.Certificates = certs.FilterExpiredCerts(ca.Certificates...)
@@ -297,7 +325,7 @@ func (c *EtcdProxyController) generateClientCertificate(etcdstorage *etcdstorage
 }
 
 // generateServerBundle generates both Serving CA bundle and Server certificate/key pair.
-func (c *EtcdProxyController) generateServerBundle(etcdstorage *etcdstoragev1alpha1.EtcdStorage) (*certs.Certificate, *certs.Certificate, error) {
+func (c *EtcdProxyController) generateServerBundle(etcdstorage *etcdstoragev1alpha1.EtcdStorage) (*certs.Certificate, error) {
 	currentTime := time.Now
 	r := rand.New(rand.NewSource(currentTime().UnixNano()))
 	serviceUrl := fmt.Sprintf("%s.%s.svc", serviceName(etcdstorage), c.config.ControllerNamespace)
@@ -307,15 +335,15 @@ func (c *EtcdProxyController) generateServerBundle(etcdstorage *etcdstoragev1alp
 		CommonName: fmt.Sprintf("%s-server-signer-%v", serviceUrl, time.Now().Unix()),
 	}, r.Int63n(100000), currentTime)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	// Generate server certificate/key pair.
 	serverCerts, err := servingCA.NewServerCertificate(pkix.Name{CommonName: serviceUrl},
 		[]string{serviceUrl}, r.Int63n(100000), currentTime)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	return servingCA, serverCerts, nil
+	return serverCerts, nil
 }
