@@ -46,7 +46,9 @@ func (c *EtcdProxyController) ensureClientCertificates(etcdstorage *etcdstoragev
 				Type: v1.SecretTypeTLS,
 				Data: map[string][]byte{},
 			}
-		} else if err != nil {
+			err = nil
+		}
+		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
@@ -87,7 +89,9 @@ func (c *EtcdProxyController) ensureClientCertificates(etcdstorage *etcdstoragev
 					},
 					Data: map[string]string{},
 				}
-			} else if err != nil {
+				err = nil
+			}
+			if err != nil {
 				errs = append(errs, err)
 			}
 
@@ -172,7 +176,9 @@ func (c *EtcdProxyController) ensureServerCertificates(etcdstorage *etcdstoragev
 			Type: v1.SecretTypeTLS,
 			Data: map[string][]byte{},
 		}
-	} else if err != nil {
+		err = nil
+	}
+	if err != nil {
 		return err
 	}
 
@@ -226,7 +232,9 @@ func (c *EtcdProxyController) ensureServerCertificates(etcdstorage *etcdstoragev
 				},
 				Data: map[string]string{},
 			}
-		} else if err != nil {
+			err = nil
+		}
+		if err != nil {
 			return err
 		}
 
