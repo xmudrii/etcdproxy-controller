@@ -246,11 +246,9 @@ func (c *EtcdProxyController) ensureServerCertificates(etcdstorage *etcdstoragev
 		}
 	}
 
-	if serverCert == nil {
-		serverCert, err = certs.ParseCertificateBytes(serverSecret.Data["tls.crt"], serverSecret.Data["tls.key"])
-		if err != nil {
-			return err
-		}
+	serverCert, err = certs.ParseCertificateBytes(serverSecret.Data["tls.crt"], serverSecret.Data["tls.key"])
+	if err != nil {
+		return err
 	}
 
 	// Append new Serving CA certificate to the bundle in all ConfigMaps defined by EtcdStorage Spec.
@@ -274,10 +272,8 @@ func (c *EtcdProxyController) ensureServerCertificates(etcdstorage *etcdstoragev
 			return err
 		}
 
-		if signedBy, ok := configMap.Annotations[ProxyCertificateSignedBy]; ok {
-			if signedBy == serverCert.Certificates[0].Issuer.CommonName {
-				continue
-			}
+		if signedBy, ok := configMap.Annotations[ProxyCertificateSignedBy]; ok && signedBy == serverCert.Certificates[0].Issuer.CommonName {
+			continue
 		}
 
 		var ca *certs.Certificate
