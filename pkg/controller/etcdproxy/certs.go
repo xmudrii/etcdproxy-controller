@@ -29,12 +29,12 @@ const ProxyCertificateExpiryAnnotation = "etcd.xmudrii.com/certificate-expiry-da
 // * Generates new CA certificate. If CA bundle already exists in the controller namespace, the new CA certificate will be appended to the bundle.
 // Expired CA certificates from the bundle are removed in this phase.
 // * Generates new Client certificate/key pair using the newly generated CA certificate and updates the appropriate Secret with new pair.
-// Problem: the API server have to be "restarted" manually to pick up changes. Hopefully, this to be fixed in future Kube versions.
+// TODO: the API server have to be "restarted" manually to pick up changes. Hopefully, this to be fixed in future Kube versions.
 func (c *EtcdProxyController) ensureClientCertificates(etcdstorage *etcdstoragev1alpha1.EtcdStorage) error {
 	var signingCertKeyPair *certs.Certificate
 	var errs []error
-	// TODO: Huh, clientCertSecret and secretClientCert sounds way too similar.
 	for _, clientCertSecret := range etcdstorage.Spec.ClientCertSecrets {
+		// Get Secret from Kube if it exists or return new, empty, Secret.
 		secret, err := c.kubeclientset.CoreV1().Secrets(clientCertSecret.Namespace).Get(clientCertSecret.Name, metav1.GetOptions{})
 		if errors.IsNotFound(err) {
 			secret = &v1.Secret{
@@ -60,7 +60,7 @@ func (c *EtcdProxyController) ensureClientCertificates(etcdstorage *etcdstoragev
 				errs = append(errs, err)
 				continue
 			}
-
+			// If Certificate is not-expired, skip this iteration.
 			if certExpiry.After(time.Now()) {
 				continue
 			}
@@ -134,6 +134,7 @@ func (c *EtcdProxyController) ensureClientCertificates(etcdstorage *etcdstoragev
 			return err
 		}
 
+		// Build new Secret and apply it.
 		secret.Annotations = map[string]string{
 			ProxyCertificateExpiryAnnotation: clientCert.Certificates[0].NotAfter.Format(time.RFC3339),
 		}
@@ -183,7 +184,7 @@ func (c *EtcdProxyController) ensureServerCertificates(etcdstorage *etcdstoragev
 	}
 
 	var serverCert *certs.Certificate
-	// Check is annotation containing expiry date present and valid. If it is valid, we're skipping this iteration.
+	// Check does the annotation contain valid expiry date, and if not, or it is expired, regenerate the certificate.
 	if expiry, ok := serverSecret.Annotations[ProxyCertificateExpiryAnnotation]; ok {
 		certExpiry, err := time.Parse(time.RFC3339, expiry)
 		if err != nil {
@@ -213,9 +214,7 @@ func (c *EtcdProxyController) ensureServerCertificates(etcdstorage *etcdstoragev
 				return err
 			}
 		}
-	}
-
-	if _, ok := serverSecret.Data["tls.crt"]; !ok {
+	} else if !ok { // If the annotation is not present, generate the certificate.
 		serverCert, err = c.generateServerBundle(etcdstorage)
 		if err != nil {
 			return err
@@ -238,7 +237,9 @@ func (c *EtcdProxyController) ensureServerCertificates(etcdstorage *etcdstoragev
 		if err != nil {
 			return err
 		}
-	} else if ok && serverCert == nil {
+	}
+
+	if serverCert == nil {
 		serverCert, err = certs.ParseCertificateBytes(serverSecret.Data["tls.crt"], serverSecret.Data["tls.key"])
 		if err != nil {
 			return err
@@ -302,7 +303,6 @@ func (c *EtcdProxyController) ensureServerCertificates(etcdstorage *etcdstoragev
 	return utilerrors.NewAggregate(errs)
 }
 
-// TODO: Potentially, we don't need that many helpers. Maybe moving some of them to helpers.go is good idea as well.
 // generateClientBundle generates new etcd-proxy Client CA bundle.
 func (c *EtcdProxyController) generateClientSigningCertKeyPair(etcdstorage *etcdstoragev1alpha1.EtcdStorage) (*certs.Certificate, error) {
 	currentTime := time.Now
