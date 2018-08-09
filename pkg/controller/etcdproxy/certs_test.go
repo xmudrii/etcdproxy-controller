@@ -9,7 +9,7 @@ import (
 
 	"github.com/xmudrii/etcdproxy-controller/pkg/apis/etcd/v1alpha1"
 	"github.com/xmudrii/etcdproxy-controller/pkg/certs"
-	)
+)
 
 func TestEnsureServerCertificates(t *testing.T) {
 	etcdStorage := func(name string) *v1alpha1.EtcdStorage {

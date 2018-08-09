@@ -15,8 +15,12 @@ import (
 	"github.com/xmudrii/etcdproxy-controller/pkg/certs"
 )
 
-// ProxyCertificateExpiryAnnotation contains the certificate expiration date in RFC3339 format.
-const ProxyCertificateExpiryAnnotation = "etcd.xmudrii.com/certificate-expiry-date"
+const (
+	// ProxyCertificateExpiryAnnotation contains the certificate expiration date in RFC3339 format.
+	ProxyCertificateExpiryAnnotation = "etcd.xmudrii.com/certificate-expiry-date"
+	// ProxyCertificateSignedBy contains the common name of the certificate that signed another certificate.
+	ProxyCertificateSignedBy = "etcd.xmudrii.com/certificate-signed-by"
+)
 
 // ensureClientCertificates handles certificate generating, renewal and rotation for Client CA bundle and Client certificates.
 // The Client CA bundle is saved in a ConfigMap located in the controller namespace. The ConfigMap is named etcdstorageName-ca-cert.
@@ -137,6 +141,7 @@ func (c *EtcdProxyController) ensureClientCertificates(etcdstorage *etcdstoragev
 		// Build new Secret and apply it.
 		secret.Annotations = map[string]string{
 			ProxyCertificateExpiryAnnotation: clientCert.Certificates[0].NotAfter.Format(time.RFC3339),
+			ProxyCertificateSignedBy:         signingCertKeyPair.Certificates[0].Issuer.CommonName,
 		}
 		secret.Data = map[string][]byte{
 			"tls.crt": clientCertBytes,
@@ -204,6 +209,7 @@ func (c *EtcdProxyController) ensureServerCertificates(etcdstorage *etcdstoragev
 
 			serverSecret.Annotations = map[string]string{
 				ProxyCertificateExpiryAnnotation: serverCert.Certificates[0].NotAfter.Format(time.RFC3339),
+				ProxyCertificateSignedBy:         serverCert.Certificates[0].Issuer.CommonName,
 			}
 			serverSecret.Data = map[string][]byte{
 				"tls.crt": serverCertBytes,
@@ -228,6 +234,7 @@ func (c *EtcdProxyController) ensureServerCertificates(etcdstorage *etcdstoragev
 
 		serverSecret.Annotations = map[string]string{
 			ProxyCertificateExpiryAnnotation: serverCert.Certificates[0].NotAfter.Format(time.RFC3339),
+			ProxyCertificateSignedBy:         serverCert.Certificates[0].Issuer.CommonName,
 		}
 		serverSecret.Data = map[string][]byte{
 			"tls.crt": serverCertBytes,
@@ -267,6 +274,12 @@ func (c *EtcdProxyController) ensureServerCertificates(etcdstorage *etcdstoragev
 			return err
 		}
 
+		if signedBy, ok := configMap.Annotations[ProxyCertificateSignedBy]; ok {
+			if signedBy == serverCert.Certificates[0].Issuer.CommonName {
+				continue
+			}
+		}
+
 		var ca *certs.Certificate
 		if oldCABytes, ok := configMap.Data["serving-ca.crt"]; ok {
 			ca, err = certs.ParseCertificateBytes([]byte(oldCABytes), nil)
@@ -275,12 +288,13 @@ func (c *EtcdProxyController) ensureServerCertificates(etcdstorage *etcdstoragev
 				continue
 			}
 		}
-		// TODO: This will duplicate. Unit test missing.
+
 		if ca != nil {
 			ca.Certificates = append(ca.Certificates, serverCert.Certificates...)
 		} else {
 			ca = serverCert
 		}
+
 		// Filter expired certificates in the Serving CA bundle.
 		ca.Certificates = certs.FilterExpiredCerts(ca.Certificates...)
 		if err != nil {
@@ -290,6 +304,9 @@ func (c *EtcdProxyController) ensureServerCertificates(etcdstorage *etcdstoragev
 		servingCABytes, _, err := ca.GetPEMBytes()
 		if err != nil {
 			return err
+		}
+		configMap.Annotations = map[string]string{
+			ProxyCertificateSignedBy: serverCert.Certificates[0].Issuer.CommonName,
 		}
 		configMap.Data = map[string]string{
 			"serving-ca.crt": string(servingCABytes),
@@ -339,8 +356,9 @@ func (c *EtcdProxyController) generateServerBundle(etcdstorage *etcdstoragev1alp
 	}
 
 	// Generate server certificate/key pair.
-	serverCerts, err := servingCA.NewServerCertificate(pkix.Name{CommonName: serviceUrl},
-		[]string{serviceUrl}, r.Int63n(100000), currentTime)
+	serverCerts, err := servingCA.NewServerCertificate(pkix.Name{
+		CommonName: fmt.Sprintf("%s-serving-cert-%v", serviceUrl, time.Now().Unix()),
+	}, []string{serviceUrl}, r.Int63n(100000), currentTime)
 	if err != nil {
 		return nil, err
 	}
