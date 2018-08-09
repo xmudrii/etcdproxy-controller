@@ -154,6 +154,9 @@ func (in *EtdcStorageSpec) DeepCopyInto(out *EtdcStorageSpec) {
 		*out = make([]ClientCertificateDestination, len(*in))
 		copy(*out, *in)
 	}
+	out.SigningCertificateValidity = in.SigningCertificateValidity
+	out.ServingCertificateValidity = in.ServingCertificateValidity
+	out.ClientCertificateValidity = in.ClientCertificateValidity
 	return
 }
 

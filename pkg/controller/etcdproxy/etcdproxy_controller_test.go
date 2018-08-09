@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
@@ -78,6 +79,9 @@ func TestSyncHandler(t *testing.T) {
 						Namespace: "k8s-sample-apiserver",
 					},
 				},
+				SigningCertificateValidity: metav1.Duration{time.Hour * 24 * 60},
+				ServingCertificateValidity: metav1.Duration{time.Hour * 24 * 60},
+				ClientCertificateValidity:  metav1.Duration{time.Hour * 24 * 60},
 			},
 		}
 	}
@@ -221,6 +225,9 @@ func TestSyncHandlerFailure(t *testing.T) {
 						Namespace: "k8s-sample-apiserver",
 					},
 				},
+				SigningCertificateValidity: metav1.Duration{time.Hour * 24 * 60},
+				ServingCertificateValidity: metav1.Duration{time.Hour * 24 * 60},
+				ClientCertificateValidity:  metav1.Duration{time.Hour * 24 * 60},
 			},
 		}
 	}

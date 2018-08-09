@@ -20,6 +20,7 @@ spec:
               type: string
               maxLength: 59 # because of service name, explained above.
         spec:
+          required: ["signingCertificateValidity", "servingCertificateValidity", "clientCertificateValidity"]
           properties:
             caCertConfigMap:
               type: array
@@ -45,3 +46,13 @@ spec:
                   namespace:
                     type: string
                     pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+            signingCertificateValidity:
+              type: string
+              pattern: '^[0-9]*[.]?[0-9]*(ns|us|ms|m|s|h)$'
+            servingCertificateValidity:
+              type: string
+              pattern: '^[0-9]*[.]?[0-9]*(ns|us|ms|m|s|h)'
+            clientCertificateValidity:
+              type: string
+              pattern: '^[0-9]*[.]?[0-9]*(ns|us|ms|m|s|h)'
+

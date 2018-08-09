@@ -7,6 +7,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
+	"time"
+
 	"github.com/xmudrii/etcdproxy-controller/pkg/apis/etcd/v1alpha1"
 	"github.com/xmudrii/etcdproxy-controller/pkg/certs"
 )
@@ -22,6 +24,9 @@ func TestEnsureServerCertificates(t *testing.T) {
 						Namespace: "k8s-sample-apiserver",
 					},
 				},
+				SigningCertificateValidity: metav1.Duration{time.Hour * 24 * 60},
+				ServingCertificateValidity: metav1.Duration{time.Hour * 24 * 60},
+				ClientCertificateValidity:  metav1.Duration{time.Hour * 24 * 60},
 			},
 		}
 	}
@@ -133,6 +138,9 @@ func TestEnsureServerCertificatesDuplication(t *testing.T) {
 						Namespace: "k8s-sample-apiserver",
 					},
 				},
+				SigningCertificateValidity: metav1.Duration{time.Hour * 24 * 60},
+				ServingCertificateValidity: metav1.Duration{time.Hour * 24 * 60},
+				ClientCertificateValidity:  metav1.Duration{time.Hour * 24 * 60},
 			},
 		}
 	}
@@ -235,6 +243,9 @@ func TestEnsureClientCertificates(t *testing.T) {
 						Namespace: "k8s-sample-apiserver",
 					},
 				},
+				SigningCertificateValidity: metav1.Duration{time.Hour * 24 * 60},
+				ServingCertificateValidity: metav1.Duration{time.Hour * 24 * 60},
+				ClientCertificateValidity:  metav1.Duration{time.Hour * 24 * 60},
 			},
 		}
 	}
@@ -356,6 +367,9 @@ func TestEnsureClientCertificatesDuplication(t *testing.T) {
 						Namespace: "k8s-sample-apiserver",
 					},
 				},
+				SigningCertificateValidity: metav1.Duration{time.Hour * 24 * 60},
+				ServingCertificateValidity: metav1.Duration{time.Hour * 24 * 60},
+				ClientCertificateValidity:  metav1.Duration{time.Hour * 24 * 60},
 			},
 		}
 	}

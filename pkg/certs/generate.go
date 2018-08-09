@@ -5,12 +5,12 @@ import (
 	"crypto/x509/pkix"
 	"math/big"
 	"time"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // NewCACertificate generates and signs new CA certificate and key.
-func NewCACertificate(subject pkix.Name, serialNumber int64, currentTime func() time.Time) (*Certificate, error) {
-	caLifetime := time.Duration(CABundleValidForDays) * 24 * time.Hour
-
+func NewCACertificate(subject pkix.Name, serialNumber int64, validity metav1.Duration, currentTime func() time.Time) (*Certificate, error) {
 	caPublicKey, caPrivateKey, err := newKeyPair()
 	if err != nil {
 		return nil, err
@@ -22,7 +22,7 @@ func NewCACertificate(subject pkix.Name, serialNumber int64, currentTime func() 
 		SignatureAlgorithm: x509.SHA256WithRSA,
 
 		NotBefore:    currentTime().Add(-1 * time.Second),
-		NotAfter:     currentTime().Add(caLifetime),
+		NotAfter:     currentTime().Add(validity.Duration),
 		SerialNumber: big.NewInt(serialNumber),
 
 		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
@@ -42,9 +42,7 @@ func NewCACertificate(subject pkix.Name, serialNumber int64, currentTime func() 
 }
 
 // NewServerCertificate generates and signs new Server certificate and key from CA bundle.
-func (c *Certificate) NewServerCertificate(subject pkix.Name, hosts []string, serialNumber int64, currentTime func() time.Time) (*Certificate, error) {
-	lifetime := time.Duration(ServerBundleValidForDays) * 24 * time.Hour
-
+func (c *Certificate) NewServerCertificate(subject pkix.Name, hosts []string, serialNumber int64, validity metav1.Duration, currentTime func() time.Time) (*Certificate, error) {
 	serverPublicKey, serverPrivateKey, err := newKeyPair()
 	if err != nil {
 		return nil, err
@@ -56,7 +54,7 @@ func (c *Certificate) NewServerCertificate(subject pkix.Name, hosts []string, se
 		SignatureAlgorithm: x509.SHA256WithRSA,
 
 		NotBefore:    currentTime().Add(-1 * time.Second),
-		NotAfter:     currentTime().Add(lifetime),
+		NotAfter:     currentTime().Add(validity.Duration),
 		SerialNumber: big.NewInt(serialNumber),
 
 		KeyUsage: x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
@@ -78,9 +76,7 @@ func (c *Certificate) NewServerCertificate(subject pkix.Name, hosts []string, se
 }
 
 // NewClientCertificate generates and signs new Client certificate and key from server certificate..
-func (c *Certificate) NewClientCertificate(subject pkix.Name, serialNumber int64, currentTime func() time.Time) (*Certificate, error) {
-	lifetime := time.Duration(ClientBundleValidForDays) * 24 * time.Hour
-
+func (c *Certificate) NewClientCertificate(subject pkix.Name, serialNumber int64, validity metav1.Duration, currentTime func() time.Time) (*Certificate, error) {
 	clientPublicKey, clientPrivateKey, err := newKeyPair()
 	if err != nil {
 		return nil, err
@@ -92,7 +88,7 @@ func (c *Certificate) NewClientCertificate(subject pkix.Name, serialNumber int64
 		SignatureAlgorithm: x509.SHA256WithRSA,
 
 		NotBefore:    currentTime().Add(-1 * time.Second),
-		NotAfter:     currentTime().Add(lifetime),
+		NotAfter:     currentTime().Add(validity.Duration),
 		SerialNumber: big.NewInt(serialNumber),
 
 		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,

@@ -16,14 +16,6 @@ import (
 	"k8s.io/client-go/util/cert"
 )
 
-var (
-	// TODO: make this configurable.
-	// TODO: set limits (e.g. min = 5 minutes)
-	CABundleValidForDays     = 365 * 5 // 5 years.
-	ServerBundleValidForDays = 365 * 3 // 3 years.
-	ClientBundleValidForDays = 30      // 1 month.
-)
-
 // Certificate contains slice of certificates and a key.
 type Certificate struct {
 	Certificates []*x509.Certificate
