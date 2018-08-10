@@ -1,0 +1,111 @@
+# This manifest creates the EtcdStorage CustomResource which provides the etcd storage for the sample-apiserver,
+# then deploys the sample-apiserver.
+#
+# The API server deployment uses the 'openshift/service-serving-cert-signer' to handle TLS certificates for the API server.
+# The 'openshift/service-serving-cert-signer' works with bare Kubernetes and doesn't require OpenShift.
+---
+# Creates the etcd stroage for the aggregated API server.
+# The etcd is available on http://sample-apiserver.kube-apiserver-storage.svc:2379.
+# This EtcdStorage resource instructs the EtcdProxyController to use the ConfigMap 'k8s-sample-apiserver/etcd-serving-ca'
+# for the serving CA certificate and the Secret 'k8s-sample-apiserver/etcd-client-cert' for the client cert/key pair.
+# All three certificate types, Signing, Serving and Client, are valid for 1 month (730h).
+apiVersion: etcd.xmudrii.com/v1alpha1
+kind: EtcdStorage
+metadata:
+  name: sample-apiserver
+spec:
+  caCertConfigMap:
+  - name: etcd-serving-ca
+    namespace: k8s-sample-apiserver
+  clientCertSecret:
+  - name: etcd-client-cert
+    namespace: k8s-sample-apiserver
+  signingCertificateValidity: 730h
+  servingCertificateValidity: 730h
+  clientCertificateValidity: 730h
+---
+# Deploys the sample-apiserver (https://github.com/kubernetes/sample-apiserver).
+# The Deployment uses the xmudrii/kube-sample-apiserver image.
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: apiserver
+  namespace: k8s-sample-apiserver
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      apiserver: sample-apiserver
+  template:
+    metadata:
+      labels:
+        apiserver: sample-apiserver
+    spec:
+      serviceAccountName: apiserver
+      containers:
+      - name: sample-apiserver
+        image: xmudrii/kube-sample-apiserver
+        imagePullPolicy: Always
+        command:
+        - /kube-sample-apiserver
+        - "--etcd-servers=https://etcd-sample-apiserver.kube-apiserver-storage.svc:2379"
+        - "--etcd-cafile=/etc/etcd-certs/ca/serving-ca.crt"
+        - "--etcd-certfile=/etc/etcd-certs/client/tls.crt"
+        - "--etcd-keyfile=/etc/etcd-certs/client/tls.key"
+        - "--tls-cert-file=/etc/apiserver-certs/tls.crt"
+        - "--tls-private-key-file=/etc/apiserver-certs/tls.key"
+        volumeMounts:
+        - mountPath: /etc/etcd-certs/ca
+          name: etcd-serving-ca
+        - mountPath: /etc/etcd-certs/client
+          name: etcd-client-cert
+      volumes:
+      - name: etcd-serving-ca
+        configMap:
+          name: etcd-serving-ca
+      - name: etcd-client-cert
+        secret:
+          secretName: etcd-client-cert
+---
+# This Service exposes the API provided by the k8s-sample-apiserver.
+# The Service comes with the appropriate annotation ensuring the service-serving-cert-signer will generate
+# TLS certificates for the API server.
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: k8s-sample-apiserver
+spec:
+  ports:
+  - port: 443
+    protocol: TCP
+    targetPort: 443
+  selector:
+    apiserver: sample-apiserver
+---
+---
+# APIService used to register the API and the API resources with the Kubernetes API.
+# The Service comes with the appropriate annotation ensuring the service-serving-cert-signer will generate
+# TLS certificates for the API server.
+apiVersion: apiregistration.k8s.io/v1beta1
+kind: APIService
+metadata:
+  name: v1alpha1.wardle.k8s.io
+spec:
+<<<<<<< HEAD:artifacts/demo/07-apiserver-deployment.yaml
+  # When running the sample-apiserver, self-generated certificates are generated to ensure secure communication.
+  # However, as those certificates are self-generated, TLS errors can occur, so we're disabling checks to prevent errors.
+  # We're also providing the CA certificate to the sample-apiserver, to let users use the API with their client certificate.
+  # The cilent certificates for the sample-apiserver are provided in the 'sample-apiserver-clientcert' Secret.
+  insecureSkipTLSVerify: true
+=======
+  insecureSkipTLSVerify: false
+>>>>>>> 1056622... update:artifacts/demo/06-apiserver-deployment.yaml
+  group: wardle.k8s.io
+  groupPriorityMinimum: 1000
+  versionPriority: 15
+  service:
+    name: api
+    namespace: k8s-sample-apiserver
+  version: v1alpha1
+

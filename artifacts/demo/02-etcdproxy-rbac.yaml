@@ -1,0 +1,61 @@
+# This manifest deploys RBAC roles needed for EtcdProxyController.
+---
+# ClusterRole to get EtcdStorages and update EtcdStorage Status Subresource.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: etcdproxy-crd-clusterrole
+rules:
+- apiGroups: ["etcd.xmudrii.com"]
+  resources: ["etcdstorages"]
+  verbs: ["get", "watch", "list"]
+- apiGroups: ["etcd.xmudrii.com"]
+  resources: ["etcdstorages/status"]
+  verbs: ["update", "patch"]
+---
+# ClusterRoleBinding to bind the ClusterRole to the EtcdProxyController ServiceAccount (etcdproxy-controller-sa).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: etcdproxy-crd-clusterrolebinding
+subjects:
+- kind: ServiceAccount
+  name: etcdproxy-controller-sa
+  namespace: kube-apiserver-storage
+roleRef:
+  kind: ClusterRole
+  name: etcdproxy-crd-clusterrole
+  apiGroup: rbac.authorization.k8s.io
+---
+# Role for managing Deployments, Services, ConfigMap and Secrets.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: etcdproxy-controller-role
+  namespace: kube-apiserver-storage
+rules:
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "watch", "list", "create", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["get", "watch", "list", "create", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["secrets", "configmaps"]
+  verbs: ["get", "watch", "list", "create", "update", "patch", "delete"]
+---
+# RoleBinding to bind the Role to the EtcdProxyController ServiceAccount (etcdproxy-controller-sa).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: etcdproxy-controller-rolebinding
+  namespace: kube-apiserver-storage
+subjects:
+- kind: ServiceAccount
+  name: etcdproxy-controller-sa
+  namespace: kube-apiserver-storage
+roleRef:
+  kind: Role
+  name: etcdproxy-controller-role
+  apiGroup: rbac.authorization.k8s.io
+

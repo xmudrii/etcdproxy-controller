@@ -1,0 +1,93 @@
+# RBAC roles for the sample-apiserver.
+# This manifest includes both default roles required by the sample-apiserver, as well as,
+# the roles ensuring the EtcdProxyController ServiceAccount (etcdproxy-controller-sa) can
+# get, update and patch ConfigMap named 'etcd-serving-ca' and Secret named 'etcd-client-cert'.
+---
+# ClusterRoleBinding to allow API delegation.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: k8s-sample-apiserver:system:auth-delegator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+- kind: ServiceAccount
+  name: apiserver
+  namespace: k8s-sample-apiserver
+---
+# RoleBinding used for authentication.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: wardle-auth-reader
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: extension-apiserver-authentication-reader
+subjects:
+- kind: ServiceAccount
+  name: apiserver
+  namespace: k8s-sample-apiserver
+---
+# ClusterRole used to allow API server to use Admission Webhooks.
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: aggregated-apiserver-clusterrole
+rules:
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: ["get", "watch", "list"]
+- apiGroups: ["admissionregistration.k8s.io"]
+  resources: ["mutatingwebhookconfigurations", "validatingwebhookconfigurations"]
+  verbs: ["get", "watch", "list"]
+---
+# ClusterRoleBinding binding webhooks rule to API server service account.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sample-apiserver-clusterrolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: aggregated-apiserver-clusterrole
+subjects:
+- kind: ServiceAccount
+  name: apiserver
+  namespace: k8s-sample-apiserver
+---
+# Role to allow getting, updating and patching the Secret named 'etcd-client-cert'
+# and ConfigMap named 'etcd-serving-ca' by the EtcdProxyController ServiceAccount.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: etcdproxy-manage-certs
+  namespace: k8s-sample-apiserver
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "update", "patch"]
+  resourceNames: ["etcd-client-cert"]
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "update", "patch"]
+  resourceNames: ["etcd-serving-ca"]
+---
+# Bind the role for managing certificates ConfigMap and Secret to the EtcdProxyController ServiceAccount (etcdproxy-controller-sa).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: etcdproxy-manage-certs-rb
+  namespace: k8s-sample-apiserver
+subjects:
+- kind: ServiceAccount
+  name: etcdproxy-controller-sa
+  namespace: kube-apiserver-storage
+roleRef:
+  kind: Role
+  name: etcdproxy-manage-certs
+  apiGroup: rbac.authorization.k8s.io
+

@@ -1,0 +1,24 @@
+# This manifest creates the EtcdProxyController namespace and ServiceAccounts used by EtcdProxyController and etcd-proxy pods.
+# The controller by default uses namespace named'kube-apiserver-storage', but the name can be changed by running
+# controller with the '--namespace' flag.
+---
+# The EtcdProxyController uses this namespace for deploying etcd-proxy pods and all relevant resources.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kube-apiserver-storage
+---
+# The ServiceAccount used by the EtcdProxyController to manage used resources.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: etcdproxy-controller-sa
+  namespace: kube-apiserver-storage
+---
+# The ServiceAccount used by etcd-proxy pods.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: etcdproxy-sa
+  namespace: kube-apiserver-storage
+
