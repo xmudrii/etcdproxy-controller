@@ -59,6 +59,8 @@ spec:
           name: etcd-serving-ca
         - mountPath: /etc/etcd-certs/client
           name: etcd-client-cert
+        - mountPath: /etc/apiserver-certs
+          name: wardle-apiserver-serving-cert
       volumes:
       - name: etcd-serving-ca
         configMap:
@@ -66,6 +68,9 @@ spec:
       - name: etcd-client-cert
         secret:
           secretName: etcd-client-cert
+      - name: wardle-apiserver-serving-cert
+        secret:
+          secretName: wardle-apiserver-serving-cert
 ---
 # This Service exposes the API provided by the k8s-sample-apiserver.
 # The Service comes with the appropriate annotation ensuring the service-serving-cert-signer will generate
@@ -75,6 +80,8 @@ kind: Service
 metadata:
   name: api
   namespace: k8s-sample-apiserver
+  annotations:
+    service.alpha.openshift.io/serving-cert-secret-name: wardle-apiserver-serving-cert
 spec:
   ports:
   - port: 443
@@ -83,7 +90,6 @@ spec:
   selector:
     apiserver: sample-apiserver
 ---
----
 # APIService used to register the API and the API resources with the Kubernetes API.
 # The Service comes with the appropriate annotation ensuring the service-serving-cert-signer will generate
 # TLS certificates for the API server.
@@ -91,16 +97,14 @@ apiVersion: apiregistration.k8s.io/v1beta1
 kind: APIService
 metadata:
   name: v1alpha1.wardle.k8s.io
+  annotations:
+    service.alpha.openshift.io/inject-cabundle: "true"
 spec:
-<<<<<<< HEAD:artifacts/demo/07-apiserver-deployment.yaml
   # When running the sample-apiserver, self-generated certificates are generated to ensure secure communication.
   # However, as those certificates are self-generated, TLS errors can occur, so we're disabling checks to prevent errors.
   # We're also providing the CA certificate to the sample-apiserver, to let users use the API with their client certificate.
   # The cilent certificates for the sample-apiserver are provided in the 'sample-apiserver-clientcert' Secret.
-  insecureSkipTLSVerify: true
-=======
   insecureSkipTLSVerify: false
->>>>>>> 1056622... update:artifacts/demo/06-apiserver-deployment.yaml
   group: wardle.k8s.io
   groupPriorityMinimum: 1000
   versionPriority: 15

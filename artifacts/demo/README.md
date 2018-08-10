@@ -1,24 +1,24 @@
 # EtcdProxyController demo
 
-This directory contains manifest and scripts for deploying the EtcdProxyController.
+This directory contains the manifests the EtcdProxyController and the `sample-apiserver`.
 
-In this directory, you'll find manifests for deploying:
+Throughout the demo, we'll deploy:
 
-* core etcd, located in the `etcd` subdirectory,
-* etcdproxy-controller, with all required resources, such as ServiceAccounts and RBAC roles,
-* [sample-apiserver](https://github.com/kubernetes/sample-apiserver).
+* etcdproxy-controller, with all required resources,
+* [sample-apiserver](https://github.com/kubernetes/sample-apiserver)
 
 ## Requirements
 
 On your local machine, you need:
 
-* kubectl
+* [`kubectl`](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
 
 On your Kubernetes cluster, you need:
 
-* [OpenShift service-serving-cert-signer](https://github.com/openshift/service-serving-cert-signer).  
-The demo manifests uses the `openshift/service-serving-cert-signer` to generate and handle certificates renewal and rotation for the sample-apiserver.
+* [`openshift/service-serving-cert-signer`](https://github.com/openshift/service-serving-cert-signer). The demo manifests uses the `service-serving-cert-signer` to generate and handle certificates renewal for `sample-apiserver`.
+
 You can install `openshift/service-serving-cert-signer` by deploying the following two manifests:
+
 ```bash
 # Deploy needed RBAC roles.
 kubectl auth reconcile -f https://raw.githubusercontent.com/openshift/service-serving-cert-signer/master/install/serving-cert-signer/install-rbac.yaml
@@ -27,17 +27,21 @@ kubectl auth reconcile -f https://raw.githubusercontent.com/openshift/service-se
 kubectl create -f https://raw.githubusercontent.com/openshift/service-serving-cert-signer/master/install/serving-cert-signer/install.yaml
 ```
 
-* etcd cluster with the appropriate client TLS certificates.  
-You can use any etcd v3.2+ cluster for the EtcdProxyController. If you need to deploy the new cluster, you can use the manifest
-from the `etcd` subdirectory to deploy single-node etcd v3.2.18 cluster. The manifest also includes self-generated, static, TLS certificates.
+While `service-serving-cert-signer` is a project by the OpenShift team, it doesn't require OpenShift and works on bare Kubernetes cluster.
+
+* etcd v3.2+ cluster with the appropriate client TLS certificates deployed in the EtcdProxyController namespace. 
+
+If you need to deploy a new cluster, you can use the manifest from the `etcd` subdirectory to deploy single-node etcd v3.2.18 cluster. The manifest also includes self-generated, static, TLS certificates.
 ```bash
 # Deploy etcd cluster.
 kubectl create -f etcd/01-etcd-deployment.yaml
 ```
-To use the etcd with the EtcdProxyController, you need to deploy the client certificate for etcd in the controller namespace once the EtcdProxyController is deployed.
-The client certificates can be found in the `etcd/02-etcd-client-certs.yaml` manifest. 
+
+To use the etcd with the EtcdProxyController, you need to deploy the client certificate for etcd in the controller namespace once the EtcdProxyController is deployed. The client certificates can be found in the `etcd/02-etcd-client-certs.yaml` manifest. 
 
 ## Deploying EtcdProxyController
+
+The EtcdProxyController can be deployed using the `etcdproxy` manifests from this directory.
 
 ```bash
 # Create namespace and ServiceAccounts.
@@ -54,9 +58,17 @@ At this point, you have controller deployed, but before you can use it, you need
 
 ### Deploying the client TLS certificates for etcd
 
+Once the controller is deployed, before deploying the EtcdStorage resources, you need to provide the trust CA and client certificates for the core etcd to the EtcdProxyController, so etcd-proxy pods can access the etcd cluster.
+
+The trust CA is provided by putting it in a ConfigMap in the controller (by default kube-apiserver-storage) namespace. The ConfigMap is by default called etcd-coreserving-ca, but can be configured using the --etcd-core-ca-configmap flag.
+
+The client certificate/key pair is provided to the controller as TLS Secret in the controller namespace, where tls.crt is a client certificate and tls.key is a client key. The Secret is by default called etcd-coreserving-cert, but can be configured using the --etcd-core-ca-secret flag.
+
+When using the etcd cluster deployed using the sample manifest, you can use the following manifest to deploy the client certificates:
+
 ```bash
 # Deploy the etcd client TLS certiicates.
-kubectl create -f etcd/02-etcd-client-certs.yaml
+kubectl create -f etcd/02-etcd-client-certs.yaml -n kube-apiserver-storage
 ```
 
 ## Deploying the API server.
