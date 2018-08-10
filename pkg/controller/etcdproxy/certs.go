@@ -65,7 +65,8 @@ func (c *EtcdProxyController) ensureClientCertificates(etcdstorage *etcdstoragev
 				continue
 			}
 			// If Certificate is not-expired, skip this iteration.
-			if certExpiry.After(time.Now()) {
+			// TODO: Check certExpiry without subtracting as well, to prevent errors if validity in Spec is change. To be fixed in a follow-up.
+			if certExpiry.Add(-1*etcdstorage.Spec.ClientCertificateValidity.Duration/2).After(time.Now()) || certExpiry.After(time.Now()) {
 				continue
 			}
 		}
@@ -195,7 +196,8 @@ func (c *EtcdProxyController) ensureServerCertificates(etcdstorage *etcdstoragev
 		if err != nil {
 			return err
 		}
-		if certExpiry.Before(time.Now()) {
+		// TODO: Check certExpiry without subtracting as well, to prevent errors if validity in Spec is change. To be fixed in a follow-up.
+		if certExpiry.Add(-1*etcdstorage.Spec.ClientCertificateValidity.Duration/2).Before(time.Now()) || certExpiry.Before(time.Now()) {
 			serverCert, err = c.generateServerBundle(etcdstorage)
 			if err != nil {
 				return err
