@@ -33,19 +33,23 @@ There is an example `etcd` deploymend manifest located in the [`artifacts/etcd`]
 
 ## Deploying certificates
 
-Before creating the EtcdStorage instances, it's required to create the ConfigMap and Secret containing the core etcd CA certifiacte, and client certificate and key.
+Before creating the EtcdStorage resources, it's required to create the ConfigMap and Secret containing the core etcd CA certifiacte, and client certificate and key.
 
-The CA certificate is deployed in the ConfigMap called `etcd-coreserving-ca`, in the controller namespace. The ConfigMap name can be changed by adding the `--etcd-core-ca-configmap` flag to controller command in the `00-etcdproxy-controller.yaml` file.
+The serving CA certificate is deployed in the ConfigMap called `etcd-coreserving-ca`, in the controller namespace. The ConfigMap name can be changed by adding the `--etcd-core-ca-configmap` flag to controller command in the `00-etcdproxy-controller.yaml` file.
 
 The client certificate and key are both deployed in the generic Secret called `etcd-coreserving-cert`. The Secret name can be changed by adding the `--etcd-core-certs-secret` flag to controller command in the `00-etcdproxy-controller.yaml` file.
 
 Deploying an EtcdStorage resoruce without the requrired ConfigMap and Secret in place causes the EtcdProxy pod to hang in the `Creating` condition.
 
-## Creating the proxied `etcd`
+When deploying the core etcd using the example manifest, you can deploy the trust CA and client certificate/key pair using the `etcd-client-certs.yaml` manifest. [The README file in the `artifacts/etcd` directory](artifacts/etcd) contains more details about deploying the etcd and etcd client certificates.
 
-To create the etcd instance for the aggregated API server, deploy the `EtcdStorage` manifest. Once the manifest is deployed, the controller creates and exposes the etcd proxy running against the `etcd` namespace named same as the `EtcdStorage` instance.
+## Creating the EtcdStorage resources
 
-The proxied `etcd` is exposed on `http://etcd-<etcdstorage-name>.<controller-namespace>.svc:2379`.
+To create the etcd instance for the aggregated API server, create the `EtcdStorage` resource. Once the resource is created, the controller creates and exposes the etcd-proxy instances running against the namespace in the etcd cluster named same as the `EtcdStorage` instance.
+
+Before deploying the EtcdStorage make sure to create the ConfigMap and Secret for storing certificates in the API server namespace, and to provide name and namespace of ConfigMap and Secret in the EtcdStorage resource Spec. More about certificates generation can be found in the [project's main README](../../README.md#etcd-proxy-certificates).
+
+The etcd-proxy is exposed on `http://etcd-<etcdstorage-name>.<controller-namespace>.svc:2379`.
 
 ## Deploying the `sample-apiserver`
 
