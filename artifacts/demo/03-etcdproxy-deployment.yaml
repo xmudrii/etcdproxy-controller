@@ -1,0 +1,90 @@
+# This manifest creates the EtcdStorage CustomResourceDefinition and deploys the EtcdProxyController.
+# By default, the EtcdProxyController uses etcd on 'https://etcd-svc-1.etcd.svc:2379' endpoint.
+# This can be changed by modifying the value of '--etcd-core-url' flag in the Deployment in this manifest.
+---
+# EtcdStorage CustomResourceDefinition.
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: etcdstorages.etcd.xmudrii.com
+spec:
+  group: etcd.xmudrii.com
+  version: v1alpha1
+  names:
+    kind: EtcdStorage
+    plural: etcdstorages
+  scope: Cluster
+  subresources:
+    status: {}
+  validation:
+    openAPIV3Schema:
+      properties:
+        metadata:
+          properties:
+            name:
+              type: string
+              maxLength: 59 # because of service name, explained above.
+        spec:
+          required: ["signingCertificateValidity", "servingCertificateValidity", "clientCertificateValidity"]
+          properties:
+            caCertConfigMap:
+              type: array
+              items:
+                type: object
+                required: ["name", "namespace"]
+                properties:
+                  name:
+                    type: string
+                    pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$'
+                  namespace:
+                    type: string
+                    pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+            clientCertSecret:
+              type: array
+              items:
+                type: object
+                required: ["name", "namespace"]
+                properties:
+                  name:
+                    type: string
+                    pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$'
+                  namespace:
+                    type: string
+                    pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+            signingCertificateValidity:
+              type: string
+              pattern: '^[0-9]*[.]?[0-9]*(ns|us|ms|m|s|h)'
+            servingCertificateValidity:
+              type: string
+              pattern: '^[0-9]*[.]?[0-9]*(ns|us|ms|m|s|h)'
+            clientCertificateValidity:
+              type: string
+              pattern: '^[0-9]*[.]?[0-9]*(ns|us|ms|m|s|h)'
+---
+# Deployment for the EtcdProxy Controller.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: etcdproxy-controller-deployment
+  namespace: kube-apiserver-storage
+  labels:
+    controller: etcdproxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      controller: etcdproxy
+  template:
+    metadata:
+      labels:
+        controller: etcdproxy
+    spec:
+      serviceAccountName: etcdproxy-controller-sa
+      containers:
+      - name: etcdproxy-controller
+        image: xmudrii/etcdproxy-controller:latest
+        command:
+        - /etcdproxy-controller
+        - "--etcd-core-url=https://etcd-svc-1.etcd.svc:2379"
+        imagePullPolicy: IfNotPresent
+

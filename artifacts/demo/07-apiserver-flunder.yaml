@@ -1,0 +1,9 @@
+# Sample Flunder resource provided by the sample-apiserver.
+---
+apiVersion: wardle.k8s.io/v1alpha1
+kind: Flunder
+metadata:
+  name: my-first-flunder
+  labels:
+    sample-label: "true"
+
