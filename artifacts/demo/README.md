@@ -1,6 +1,6 @@
 # EtcdProxyController demo
 
-This directory contains the manifests the EtcdProxyController and the `sample-apiserver`.
+This directory contains the manifests for the EtcdProxyController and for the `sample-apiserver`.
 
 Throughout the demo, we'll deploy:
 
@@ -41,17 +41,11 @@ To use the etcd with the EtcdProxyController, you need to deploy the client cert
 
 ## Deploying EtcdProxyController
 
-The EtcdProxyController can be deployed using the `etcdproxy` manifests from this directory.
+The EtcdProxyController can be deployed using the `etcdproxy` manifest from this directory.
 
 ```bash
-# Create namespace and ServiceAccounts.
-kubectl create -f 01-etcdproxy-namespace.yaml
+kubectl create -f 01-etcdproxy-controller.yaml
 
-# Create RBAC roles, RoleBindings and ClusterRoleBindings.
-kubectl auth reconcile -f 02-etcdproxy-rbac.yaml
-
-# Deploy the EtcdProxyController.
-kubectl create -f 03-etcdproxy-deployment.yaml
 ```
 
 At this point, you have controller deployed, but before you can use it, you need to deploy the client TLS certificates for etcd.
@@ -68,7 +62,7 @@ When using the etcd cluster deployed using the sample manifest, you can use the 
 
 ```bash
 # Deploy the etcd client TLS certiicates.
-kubectl create -f etcd/02-etcd-client-certs.yaml -n kube-apiserver-storage
+kubectl create -f etcd/02-etcd-client-certs.yaml
 ```
 
 ## Deploying the API server.
@@ -77,13 +71,13 @@ To demonstrate how EtcdProxyController works, we'll deploy the `sample-apiserver
 
 ```bash
 # Create API server Namespace, and ConfigMap and Secret for storing etcd certificates.
-kubectl create -f 04-apiserver-etcd-credentials.yaml
+kubectl create -f 02-apiserver-etcd-credentials.yaml
 
 # Create RBAC roles.
-kubectl auth reconcile -f 05-apiserver-rbac.yaml
+kubectl auth reconcile -f 03-apiserver-rbac.yaml
 
 # Deploy the sample-apiserver.
-kubectl create -f 06-apiserver-deployment.yaml
+kubectl create -f 04-apiserver-deployment.yaml
 ```
 
 ### Testing the API server
@@ -93,5 +87,5 @@ To test is API server working as expected, we can deploy a Flunder resource.
 When creating the Flunder resource, the API server communicates with the etcd server, so we're sure everything works as expected.
 
 ```bash
-kubectl create -f 08-apiserver-flunder.yaml
+kubectl create -f 05-apiserver-flunder.yaml
 ```
