@@ -17,7 +17,7 @@ echo ''
 
 # Tag xmudrii/etcdproxy-controller:latest Docker image.
 echo '- Tagging etcdproxy-controller Docker image.'
-docker build -t xmudrii/etcdproxy-controller:latest .
+${SCRIPT_ROOT}/hack/ci-build-image.sh
 echo ''
 
 # Deploying prerequisites

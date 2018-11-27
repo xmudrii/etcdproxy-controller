@@ -27,7 +27,7 @@ func NewCACertificate(subject pkix.Name, serialNumber int64, validity metav1.Dur
 
 		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
 		BasicConstraintsValid: true,
-		IsCA: true,
+		IsCA:                  true,
 	}
 
 	cert, err := signCertificate(caCert, caPublicKey, caCert, caPrivateKey)

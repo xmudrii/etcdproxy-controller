@@ -3,17 +3,14 @@ sudo: required
 
 language: go
 go:
-  - '1.10.x'
+  - '1.11.x'
 
 services:
   - docker
 
 env:
   global:
-    # Move Kubernetes config files to the appropriate place and adjust permissions.
-    - CHANGE_MINIKUBE_NONE_USER=true
-    - KUBERNETES_VERSION=v1.12.0
-    - MINIKUBE_VERSION=v0.30.0
+    - KUBECTL_VERSION=v1.12.0
 
 jobs:
   include:
@@ -29,18 +26,14 @@ jobs:
     - stage: E2E Tests
       script: make test-e2e
       before_script:
-        # Download kubectl, which is a requirement for using minikube and running e2e tests.
-        - curl -Lo kubectl https://storage.googleapis.com/kubernetes-release/release/${KUBERNETES_VERSION}/bin/linux/amd64/kubectl && chmod +x kubectl && sudo mv kubectl /usr/local/bin/
-        # Download minikube.
-        - curl -Lo minikube https://storage.googleapis.com/minikube/releases/${MINIKUBE_VERSION}/minikube-linux-amd64 && chmod +x minikube && sudo mv minikube /usr/local/bin/
-        # Start minikube.
-        - sudo minikube start --vm-driver=none --bootstrapper=kubeadm --kubernetes-version=${KUBERNETES_VERSION}
-        # Update the kubeconfig to use the minikube cluster.
-        - minikube update-context
-        # Wait for Kubernetes to be up and ready.
-        - JSONPATH='{range .items[*]}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}'; until kubectl get nodes -o jsonpath="$JSONPATH" 2>&1 | grep -q "Ready=True"; do sleep 1; done
-        # Wait for kube-dns to become ready.
-        - JSONPATH='{range .items[*]}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}'; until kubectl -n kube-system get pods -lk8s-app=kube-dns -o jsonpath="$JSONPATH" 2>&1 | grep -q "Ready=True"; do sleep 1;echo "waiting for kube-dns to be available"; kubectl get pods --all-namespaces; done
+        # Download kubectl, which is a requirement for using kind and running e2e tests.
+        - curl -Lo kubectl https://storage.googleapis.com/kubernetes-release/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl && chmod +x kubectl && sudo mv kubectl /usr/local/bin/
+        # Download and build kind
+        - go get sigs.k8s.io/kind
+        # Start kind cluster using default settings
+        - kind create cluster
+        # Set kubeconfig environment variable
+        - export KUBECONFIG="$(kind get kubeconfig-path)"
 
 notifications:
   email: false
